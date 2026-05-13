@@ -39,17 +39,9 @@ function syncCalendar() {
       // สัญญายังใช้งาน + ยังไม่มี event → สร้างใหม่
       try {
         const endDate = new Date(c.endDate);
+        Logger.log('Trying: ' + c.tenant + ' | endDate=' + c.endDate + ' | parsed=' + endDate);
         const title = 'สัญญาหมด: ' + c.tenant + ' - ' + c.property;
-        const desc  = [
-          'ผู้เช่า: ' + c.tenant,
-          'ห้อง: ' + c.property,
-          c.rent    ? 'ค่าเช่า: ' + c.rent + '/เดือน' : null,
-          c.deposit ? 'เงินมัดจำ: ' + c.deposit        : null,
-          c.phone   ? 'โทร: ' + c.phone                : null,
-          'วันเริ่ม: ' + (c.startDate || '-'),
-        ].filter(Boolean).join('\n');
-
-        const ev = cal.createAllDayEvent(title, endDate, { description: desc });
+        const ev = cal.createAllDayEvent(title, endDate);
         Logger.log('Event created: ' + c.tenant);
 
         try { ev.addPopupReminder(40320); } catch(e2) { Logger.log('reminder 40320 failed: ' + e2); }
