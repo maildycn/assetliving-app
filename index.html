@@ -730,8 +730,19 @@ function renderBatchResults(results) {
 }
 
 async function saveBatch(results) {
-  let saved = 0;
+  let saved = 0, skippedExpired = 0, skippedDup = 0;
   for (const r of results) {
+    // ข้ามสัญญาหมดอายุ
+    if (isExpired(r)) {
+      skippedExpired++;
+      continue;
+    }
+    // ข้ามรายการซ้ำ
+    const isDup = await checkDuplicate(r, BUILTIN_CONFIG.leaseDb);
+    if (isDup) {
+      skippedDup++;
+      continue;
+    }
     try {
       await saveLeaseAI(r, BUILTIN_CONFIG.leaseDb);
       if (r.property && r.end_date) await updateAssetLiving(r, BUILTIN_CONFIG.assetDb);
@@ -741,7 +752,10 @@ async function saveBatch(results) {
       console.error('Save error:', e.message);
     }
   }
-  alert(`บันทึกสำเร็จ ${saved}/${results.length} รายการครับ`);
+  const parts = [`บันทึกสำเร็จ ${saved} รายการ`];
+  if (skippedExpired) parts.push(`ข้ามหมดอายุ ${skippedExpired} รายการ`);
+  if (skippedDup)     parts.push(`ข้ามซ้ำ ${skippedDup} รายการ`);
+  alert(parts.join(' · '));
   renderHistory();
 }
 
@@ -808,6 +822,33 @@ async function callClaude(b64, mime, fileName) {
   return JSON.parse(text);
 }
 
+// ---- Expired & Duplicate helpers ----
+function isExpired(r) {
+  if (r.contract_status === 'หมดอายุแล้ว') return true;
+  if (r.end_date) return new Date(r.end_date) < new Date();
+  return false;
+}
+
+async function checkDuplicate(r, dbId) {
+  if (!r.tenant_name && !r.property) return false;
+  try {
+    const filters = [];
+    if (r.tenant_name) filters.push({ property: 'ชื่อผู้เช่า', title: { equals: r.tenant_name } });
+    if (r.property)    filters.push({ property: 'ทรัพย์สิน / ห้อง', rich_text: { equals: r.property } });
+    const res = await fetch('/api/notion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        method: 'POST',
+        path: `databases/${dbId}/query`,
+        data: { filter: filters.length === 2 ? { and: filters } : filters[0], page_size: 1 }
+      })
+    });
+    const data = await res.json();
+    return (data.results || []).length > 0;
+  } catch { return false; }
+}
+
 // ---- Show Result ----
 function showResult(r, fileName) {
   document.getElementById('result-file-name').textContent = fileName;
@@ -826,19 +867,34 @@ function showResult(r, fileName) {
   document.getElementById('r-notes').textContent     = r.special_conditions || '—';
   document.getElementById('r-status').textContent    = r.contract_status || '—';
 
-  // ตรวจสอบวันหมดสัญญา
   const warnBox = document.getElementById('warn-box');
-  if (r.end_date) {
+  const saveBtn = document.getElementById('btn-save');
+
+  // รีเซ็ตปุ่มบันทึก
+  saveBtn.disabled = false;
+  saveBtn.textContent = '💾 บันทึกลง Notion';
+  saveBtn.style.background = '';
+  saveBtn.style.color = '';
+
+  if (isExpired(r)) {
+    // สัญญาหมดอายุ — block การบันทึก
+    const daysAgo = r.end_date ? Math.abs(Math.ceil((new Date(r.end_date) - new Date()) / (1000*60*60*24))) : 0;
+    warnBox.textContent = `🚫 สัญญาหมดอายุแล้ว${daysAgo ? ` ${daysAgo} วัน` : ''} — ข้ามการบันทึกอัตโนมัติ`;
+    warnBox.classList.add('show');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '🚫 สัญญาหมดอายุ — ไม่บันทึก';
+    saveBtn.style.background = 'var(--surface3)';
+    saveBtn.style.color = 'var(--text3)';
+  } else if (r.end_date) {
     const daysLeft = Math.ceil((new Date(r.end_date) - new Date()) / (1000*60*60*24));
-    if (daysLeft < 0) {
-      warnBox.textContent = `⚠️ สัญญาหมดอายุแล้ว ${Math.abs(daysLeft)} วัน`;
-      warnBox.classList.add('show');
-    } else if (daysLeft <= 30) {
+    if (daysLeft <= 30) {
       warnBox.textContent = `⚠️ สัญญาจะหมดอายุใน ${daysLeft} วัน`;
       warnBox.classList.add('show');
     } else {
       warnBox.classList.remove('show');
     }
+  } else {
+    warnBox.classList.remove('show');
   }
 
   document.getElementById('notion-statuses').innerHTML = '';
@@ -851,11 +907,27 @@ async function saveToNotion() {
   if (!currentResult) return;
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
-  btn.textContent = '⏳ กำลังบันทึก...';
+  btn.textContent = '⏳ กำลังตรวจสอบ...';
 
   const statuses = document.getElementById('notion-statuses');
   statuses.innerHTML = '';
 
+  // ตรวจสอบรายการซ้ำ
+  addNotionStatus(statuses, 'saving', '🔍 กำลังตรวจสอบรายการซ้ำ...');
+  const isDup = await checkDuplicate(currentResult, BUILTIN_CONFIG.leaseDb);
+  if (isDup) {
+    statuses.innerHTML = '';
+    addNotionStatus(statuses, 'error', `⚠️ พบข้อมูล "${currentResult.tenant_name || ''} — ${currentResult.property || ''}" ในระบบแล้ว`);
+    const confirmSave = window.confirm(`พบข้อมูลนี้ในระบบแล้ว\nผู้เช่า: ${currentResult.tenant_name || '-'}\nห้อง: ${currentResult.property || '-'}\n\nต้องการบันทึกซ้ำหรือไม่?`);
+    if (!confirmSave) {
+      btn.disabled = false;
+      btn.textContent = '💾 บันทึกลง Notion';
+      return;
+    }
+  }
+  statuses.innerHTML = '';
+
+  btn.textContent = '⏳ กำลังบันทึก...';
   addNotionStatus(statuses, 'saving', '📄 กำลังบันทึกลง LeaseAI — สัญญาเช่า...');
   try {
     await saveLeaseAI(currentResult, BUILTIN_CONFIG.leaseDb);
