@@ -745,7 +745,7 @@ async function saveBatch(results) {
     }
     try {
       await saveLeaseAI(r, BUILTIN_CONFIG.leaseDb);
-      if (r.property && r.end_date) await withTimeout(updateAssetLiving(r, BUILTIN_CONFIG.assetDb), 10000).catch(() => {});
+      if (r.property) await withTimeout(updateAssetLiving(r, BUILTIN_CONFIG.assetDb), 10000).catch(() => {});
       saved++;
       addToHistory(r, 'saved');
     } catch(e) {
@@ -829,37 +829,52 @@ function isExpired(r) {
   return false;
 }
 
+// ── In-session duplicate guard ─────────────────────────────────────────────
+const _savedLeaseKeys = new Set();
+
+function makeLeaseKey(r) {
+  const n = (r.tenant_name || '').trim().replace(/\s+/g, '').toLowerCase();
+  const p = normalizeRoomStr(r.property);
+  const s = r.start_date || '';
+  return `${n}|${p}|${s}`;
+}
+
 async function checkDuplicate(r, dbId) {
   if (!r.tenant_name && !r.property) return false;
-  try {
-    // ดึงสัญญาทั้งหมดของผู้เช่าคนนี้ก่อน (filter ชื่อผู้เช่า)
-    const filterBody = r.tenant_name
-      ? { filter: { property: 'ชื่อผู้เช่า', title: { equals: r.tenant_name } }, page_size: 50 }
-      : { page_size: 100 };
 
+  // 1. ตรวจ session memory ก่อน — เร็วสุด ไม่ต้องเรียก API
+  if (_savedLeaseKeys.has(makeLeaseKey(r))) return true;
+
+  // 2. ตรวจ Notion — ดึงทุก record แล้ว fuzzy match ทั้งชื่อผู้เช่า + ห้อง
+  try {
     const res = await fetch('/api/notion', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method: 'POST', path: `databases/${dbId}/query`, data: filterBody })
+      body: JSON.stringify({
+        method: 'POST',
+        path: `databases/${dbId}/query`,
+        data: { page_size: 100 }
+      })
     });
     const data = await res.json();
     const records = data.results || [];
-    if (!records.length) return false;
 
-    // ตรวจสอบซ้ำโดยเปรียบห้อง + วันที่
     for (const rec of records) {
-      const recProperty  = rec.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '';
-      const recStartDate = rec.properties['วันเริ่มสัญญา']?.date?.start || '';
-      const recEndDate   = rec.properties['วันหมดสัญญา']?.date?.start   || '';
+      // ดึงชื่อผู้เช่าจาก title property ใดก็ได้
+      const recName = getPageTitleText(rec);
+      const recProp = rec.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '';
+      const recStart = rec.properties['วันเริ่มสัญญา']?.date?.start || '';
 
-      // ถ้า start_date ตรงกัน = สัญญาเดียวกันแน่นอน
-      if (r.start_date && recStartDate && r.start_date === recStartDate) return true;
+      const nameA = (r.tenant_name || '').trim().replace(/\s+/g, '').toLowerCase();
+      const nameB = recName.trim().replace(/\s+/g, '').toLowerCase();
+      const nameMatch = nameA && nameB && (nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA));
 
-      // ถ้าชื่อห้อง fuzzy match คะแนน >= 70 ถือว่าห้องเดียวกัน
-      if (r.property && recProperty && roomMatchScore(recProperty, r.property) >= 70) {
-        // ถ้าไม่มีวันที่ หรือ end_date ตรงกัน = ซ้ำ
-        if (!r.start_date || !recStartDate) return true;
-      }
+      // วันเริ่มตรงกัน = ซ้ำแน่นอน
+      if (nameMatch && r.start_date && recStart && r.start_date === recStart) return true;
+
+      // ห้องตรงกัน + ชื่อตรงกัน = ซ้ำ
+      const propScore = (r.property && recProp) ? roomMatchScore(recProp, r.property) : 0;
+      if (nameMatch && propScore >= 60) return true;
     }
     return false;
   } catch { return false; }
@@ -954,13 +969,13 @@ async function saveToNotion() {
     addNotionStatus(statuses, 'error', '❌ บันทึก LeaseAI ไม่สำเร็จ: ' + e.message);
   }
 
-  if (currentResult.property && currentResult.end_date) {
+  if (currentResult.property) {
     addNotionStatus(statuses, 'saving', '🏠 กำลังอัปเดต AssetLiving...');
     try {
-      const updated = await withTimeout(updateAssetLiving(currentResult, BUILTIN_CONFIG.assetDb), 10000);
-      addNotionStatus(statuses, updated ? 'saved' : 'error',
-        updated ? `✅ อัปเดต AssetLiving — ${currentResult.property} เรียบร้อยแล้ว`
-                : `⚠️ ไม่พบห้อง "${currentResult.property}" ใน AssetLiving`);
+      const res = await withTimeout(updateAssetLiving(currentResult, BUILTIN_CONFIG.assetDb), 10000);
+      addNotionStatus(statuses, res.ok ? 'saved' : 'error',
+        res.ok ? `✅ อัปเดต AssetLiving สำเร็จ — ${res.debug}`
+               : `⚠️ AssetLiving: ${res.debug}`);
     } catch(e) {
       const msg = e.message === 'timeout' ? 'หมดเวลา — ข้ามการอัปเดต AssetLiving' : e.message;
       addNotionStatus(statuses, 'error', `⚠️ ${msg}`);
@@ -994,6 +1009,14 @@ async function saveLeaseAI(r, dbId) {
     body: JSON.stringify({ method: 'POST', path: 'pages', data: { parent: { database_id: dbId }, properties: props } })
   });
   if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
+  _savedLeaseKeys.add(makeLeaseKey(r));
+}
+
+function getPageTitleText(page) {
+  for (const val of Object.values(page.properties || {})) {
+    if (val.type === 'title' && val.title?.length) return val.title[0].plain_text;
+  }
+  return '';
 }
 
 function normalizeRoomStr(s) {
@@ -1070,25 +1093,38 @@ function withTimeout(promise, ms) {
 
 async function updateAssetLiving(r, dbId) {
   const pages = await fetchAllAssetPages(dbId);
+  if (!pages.length) return { ok: false, debug: 'AssetLiving database ว่างเปล่า หรือ ID ไม่ถูกต้อง' };
 
   let best = null, bestScore = 0;
   for (const p of pages) {
-    const name = p.properties['ชื่อทรัพย์สิน']?.title?.[0]?.plain_text || '';
-    const score = roomMatchScore(name, r.property);
+    // ค้นหาในทุก property ที่เป็น text/title/rich_text
+    const candidates = [];
+    for (const val of Object.values(p.properties || {})) {
+      if (val.type === 'title' && val.title?.length) candidates.push(val.title[0].plain_text);
+      if (val.type === 'rich_text' && val.rich_text?.length) candidates.push(val.rich_text[0].plain_text);
+    }
+    const score = Math.max(...candidates.map(c => roomMatchScore(c, r.property)), 0);
     if (score > bestScore) { bestScore = score; best = p; }
   }
 
-  if (!best || bestScore < 40) return false;
+  const sample = pages.slice(0, 3).map(p => getPageTitleText(p) || '(ไม่มีชื่อ)').join(', ');
+
+  if (!best || bestScore < 40) {
+    return { ok: false, debug: `ไม่พบห้อง "${r.property}" (คะแนนสูงสุด ${bestScore}) — ตัวอย่างห้องใน AssetLiving: ${sample}` };
+  }
 
   const updateProps = {};
   if (r.end_date) updateProps['วันที่สิ้นสุดสัญญา'] = { date: { start: r.end_date } };
+
+  if (!Object.keys(updateProps).length) return { ok: false, debug: 'ไม่มีข้อมูลให้อัปเดต (end_date ไม่มี)' };
 
   const uRes = await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method: 'PATCH', path: `pages/${best.id}`, data: { properties: updateProps } })
   });
-  return uRes.ok;
+  const bestName = getPageTitleText(best) || best.id;
+  return { ok: uRes.ok, debug: uRes.ok ? `จับคู่กับ "${bestName}" (score ${bestScore})` : `PATCH failed ${uRes.status}` };
 }
 
 // ---- Helpers ----
