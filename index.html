@@ -1133,16 +1133,16 @@ async function saveToNotion() {
   btn.style.background = 'linear-gradient(135deg, var(--green), #059669)';
 }
 
-async function uploadFileToNotion(file) {
+async function uploadFile(file) {
   const b64 = await toBase64(file);
-  const res = await fetch('/api/notion-upload', {
+  const res = await fetch('/api/files', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filename: file.name, mimeType: file.type, data: b64 })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || res.status);
-  return data.upload_id;
+  return data.url;
 }
 
 async function saveLeaseAI(r, dbId) {
@@ -1160,12 +1160,12 @@ async function saveLeaseAI(r, dbId) {
   if (r.start_date)   props['วันเริ่มสัญญา']       = { date: { start: r.start_date } };
   if (r.end_date)     props['วันหมดสัญญา']         = { date: { start: r.end_date } };
 
-  // แนบไฟล์ต้นฉบับ (ถ้ามี) — อัปโหลดไป Notion แล้วใส่ใน property "ไฟล์สัญญา"
+  // แนบไฟล์ต้นฉบับ — อัปโหลดไปยัง server แล้วบันทึก URL เป็น external file ใน Notion
   if (r._file) {
     try {
-      const uploadId = await uploadFileToNotion(r._file);
-      props['ไฟล์สัญญา'] = { files: [{ type: 'file_upload', file_upload: { id: uploadId } }] };
-    } catch { /* ถ้าอัปโหลดไม่ได้ก็บันทึกโดยไม่มีไฟล์แนบ */ }
+      const fileUrl = await uploadFile(r._file);
+      props['ไฟล์สัญญา'] = { files: [{ name: r._file.name, type: 'external', external: { url: fileUrl } }] };
+    } catch { /* บันทึกข้อมูลโดยไม่มีไฟล์แนบถ้าอัปโหลดไม่สำเร็จ */ }
   }
 
   const res = await fetch('/api/notion', {

@@ -1,11 +1,36 @@
 const express = require('express');
 const path    = require('path');
+const crypto  = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
+
+// ── In-memory file store (served as public URLs for Notion external links) ────
+const _files = new Map(); // id → { filename, mimeType, buf }
+
+app.post('/api/files', (req, res) => {
+  const { filename, mimeType, data } = req.body;
+  if (!data || !filename) return res.status(400).json({ error: 'filename and data required' });
+
+  const id  = crypto.randomBytes(16).toString('hex');
+  const buf = Buffer.from(data, 'base64');
+  _files.set(id, { filename, mimeType: mimeType || 'application/octet-stream', buf });
+
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  const host  = req.get('host');
+  res.json({ url: `${proto}://${host}/api/files/${id}` });
+});
+
+app.get('/api/files/:id', (req, res) => {
+  const f = _files.get(req.params.id);
+  if (!f) return res.status(404).send('File not found');
+  res.setHeader('Content-Type', f.mimeType);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(f.filename)}"`);
+  res.send(f.buf);
+});
 
 // ── Claude proxy ──────────────────────────────────────────────────────────────
 app.post('/api/claude', async (req, res) => {
@@ -51,47 +76,6 @@ app.post('/api/notion', async (req, res) => {
     const response = await fetch(`https://api.notion.com/v1/${notionPath}`, fetchOptions);
     const responseData = await response.json();
     res.status(response.status).json(responseData);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Notion file upload proxy ──────────────────────────────────────────────────
-app.post('/api/notion-upload', async (req, res) => {
-  const token = process.env.NOTION_TOKEN;
-  if (!token) return res.status(500).json({ error: 'NOTION_TOKEN not configured' });
-
-  const { filename, mimeType, data } = req.body; // data = base64 string
-  if (!data || !filename) return res.status(400).json({ error: 'filename and data required' });
-
-  try {
-    // Step 1: create file-upload record
-    const createRes = await fetch('https://api.notion.com/v1/file-uploads', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-    const upload = await createRes.json();
-    if (!createRes.ok) return res.status(createRes.status).json(upload);
-
-    // Step 2: send file binary (Node 18+ has built-in FormData and Blob)
-    const fileBuffer = Buffer.from(data, 'base64');
-    const fd = new FormData();
-    fd.set('file', new Blob([fileBuffer], { type: mimeType || 'application/octet-stream' }), filename);
-
-    const sendRes = await fetch(`https://api.notion.com/v1/file-uploads/${upload.id}/send`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28' },
-      body: fd,
-    });
-    const sendData = await sendRes.json();
-    if (!sendRes.ok) return res.status(sendRes.status).json(sendData);
-
-    res.json({ upload_id: upload.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
