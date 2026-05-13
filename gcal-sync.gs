@@ -179,3 +179,19 @@ function authCalendar() {
   ev.deleteEvent();
   Logger.log('Calendar write OK');
 }
+
+// ── Debug: ทดสอบสร้าง event จริงแบบที่ syncCalendar ทำ ──────────────────────
+function debugSync() {
+  const cal = CalendarApp.getDefaultCalendar();
+  const d = new Date('2027-01-31');
+  Logger.log('date: ' + d);
+  try {
+    const ev = cal.createAllDayEvent('Test Tenant - Room 101', d, { description: 'test desc' });
+    Logger.log('created: ' + ev.getId());
+    try { ev.addPopupReminder(40320); Logger.log('reminder OK'); } catch(e) { Logger.log('reminder failed: ' + e); }
+    ev.deleteEvent();
+    Logger.log('Done OK');
+  } catch(e) {
+    Logger.log('FAILED: ' + e);
+  }
+}
