@@ -979,32 +979,90 @@ async function saveLeaseAI(r, dbId) {
   if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
 }
 
+function normalizeRoomStr(s) {
+  return (s || '').toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[\/\-_.,()（）]/g, '')
+    .replace(/ห้อง/g, '')
+    .replace(/ชั้น/g, '')
+    .replace(/อาคาร/g, '')
+    .replace(/ตึก/g, '')
+    .replace(/คอนโด/g, '')
+    .replace(/condominium|condo|room|floor|bldg|building/gi, '');
+}
+
+function extractNumbers(s) {
+  return (s || '').match(/\d+/g) || [];
+}
+
+function roomMatchScore(dbName, aiName) {
+  if (!dbName || !aiName) return 0;
+  const a = normalizeRoomStr(dbName);
+  const b = normalizeRoomStr(aiName);
+  if (!a || !b) return 0;
+
+  // exact normalized
+  if (a === b) return 100;
+  // substring
+  if (a.includes(b) || b.includes(a)) return 80;
+
+  // word/token overlap on original strings (Thai words separated by spaces)
+  const wordsA = dbName.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+  const wordsB = aiName.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+  if (wordsA.length && wordsB.length) {
+    const common = wordsA.filter(w => wordsB.includes(w));
+    const overlap = common.length / Math.max(wordsA.length, wordsB.length);
+    if (overlap >= 0.6) return Math.round(60 + overlap * 20);
+  }
+
+  // number matching — same set of numbers (e.g. "101" matches "ห้อง 101")
+  const numsA = extractNumbers(dbName);
+  const numsB = extractNumbers(aiName);
+  if (numsA.length && numsB.length) {
+    const sameNums = numsA.filter(n => numsB.includes(n));
+    if (sameNums.length === numsA.length && sameNums.length === numsB.length) return 70;
+    if (sameNums.length > 0) return 40;
+  }
+
+  return 0;
+}
+
+async function fetchAllAssetPages(dbId) {
+  let pages = [], cursor;
+  do {
+    const body = { page_size: 100 };
+    if (cursor) body.start_cursor = cursor;
+    const res = await fetch('/api/notion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method: 'POST', path: `databases/${dbId}/query`, data: body })
+    });
+    const data = await res.json();
+    pages = pages.concat(data.results || []);
+    cursor = data.has_more ? data.next_cursor : null;
+  } while (cursor);
+  return pages;
+}
+
 async function updateAssetLiving(r, dbId) {
-  // ค้นหาห้องใน AssetLiving ผ่าน proxy
-  const qRes = await fetch('/api/notion', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'POST', path: `databases/${dbId}/query`, data: { page_size: 100 } })
-  });
-  const qData = await qRes.json();
-  const pages = qData.results || [];
+  const pages = await fetchAllAssetPages(dbId);
 
-  const target = pages.find(p => {
+  let best = null, bestScore = 0;
+  for (const p of pages) {
     const name = p.properties['ชื่อทรัพย์สิน']?.title?.[0]?.plain_text || '';
-    return name.toLowerCase().includes((r.property||'').toLowerCase()) ||
-           (r.property||'').toLowerCase().includes(name.toLowerCase());
-  });
+    const score = roomMatchScore(name, r.property);
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
 
-  if (!target) return false;
+  if (!best || bestScore < 40) return false;
 
-  // อัปเดตเฉพาะวันหมดสัญญา
   const updateProps = {};
   if (r.end_date) updateProps['วันที่สิ้นสุดสัญญา'] = { date: { start: r.end_date } };
 
   const uRes = await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'PATCH', path: `pages/${target.id}`, data: { properties: updateProps } })
+    body: JSON.stringify({ method: 'PATCH', path: `pages/${best.id}`, data: { properties: updateProps } })
   });
   return uRes.ok;
 }
