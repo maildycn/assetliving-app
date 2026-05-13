@@ -21,7 +21,7 @@ function syncCalendar() {
   for (const c of contracts) {
     if (!c.endDate) { skipped++; continue; }
 
-    const expired = new Date(c.endDate) < new Date();
+    const expired = toGregorian(c.endDate) < new Date();
 
     if (expired && c.eventId) {
       // สัญญาหมดอายุ + มี event → ลบออก
@@ -38,10 +38,17 @@ function syncCalendar() {
     } else if (!expired && !c.eventId) {
       // สัญญายังใช้งาน + ยังไม่มี event → สร้างใหม่
       try {
-        const endDate = new Date(c.endDate);
+        const endDate = toGregorian(c.endDate);
         Logger.log('Trying: ' + c.tenant + ' | endDate=' + c.endDate + ' | parsed=' + endDate);
         const title = 'สัญญาหมด: ' + c.tenant + ' - ' + c.property;
-        const ev = cal.createAllDayEvent(title, endDate);
+        const desc  = [
+          'ผู้เช่า: ' + c.tenant,
+          'ห้อง: ' + c.property,
+          c.rent    ? 'ค่าเช่า: ' + c.rent + '/เดือน' : null,
+          c.deposit ? 'เงินมัดจำ: ' + c.deposit        : null,
+          c.phone   ? 'โทร: ' + c.phone                : null,
+        ].filter(Boolean).join('\n');
+        const ev = cal.createAllDayEvent(title, endDate, { description: desc });
         Logger.log('Event created: ' + c.tenant);
 
         try { ev.addPopupReminder(40320); } catch(e2) { Logger.log('reminder 40320 failed: ' + e2); }
@@ -128,6 +135,16 @@ function notionPatchEventId(pageId, eventId) {
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
+
+// แปลง พ.ศ. → ค.ศ. อัตโนมัติ (ถ้าปีมากกว่า 2100 = พ.ศ. ให้ลบ 543)
+function toGregorian(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.split('-');
+  let year = parseInt(parts[0]);
+  if (year > 2100) year -= 543;
+  return new Date(year + '-' + parts[1] + '-' + parts[2]);
+}
+
 function getTitleText(page) {
   for (const val of Object.values(page.properties || {})) {
     if (val.type === 'title' && val.title?.length) return val.title[0].plain_text;
