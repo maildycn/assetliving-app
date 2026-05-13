@@ -377,48 +377,46 @@
     padding: 12px 14px;
   }
   .asset-picker-label {
-    font-size: 12px;
-    color: var(--accent2);
-    font-weight: 600;
-    margin-bottom: 8px;
-    letter-spacing: 0.04em;
+    font-size: 12px; color: var(--accent2); font-weight: 600;
+    margin-bottom: 8px; letter-spacing: 0.04em;
   }
+  .asset-search {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: Sarabun, sans-serif; font-size: 13px;
+    padding: 8px 12px; outline: none; margin-bottom: 8px;
+  }
+  .asset-search:focus { border-color: var(--accent); }
+  .asset-search::placeholder { color: var(--text3); }
+  .asset-room-list {
+    max-height: 220px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px;
+    margin-bottom: 8px;
+  }
+  .asset-room-list::-webkit-scrollbar { width: 4px; }
+  .asset-room-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
   .asset-room-card {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border2);
-    background: var(--surface2);
-    cursor: pointer;
-    margin-bottom: 6px;
-    transition: border-color 0.15s, background 0.15s;
-    font-size: 13px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border2); background: var(--surface2);
+    cursor: pointer; transition: border-color 0.15s, background 0.15s; font-size: 13px;
   }
   .asset-room-card:hover { border-color: var(--accent); background: rgba(99,102,241,0.08); }
   .asset-room-card.selected { border-color: var(--accent); background: rgba(99,102,241,0.15); }
   .asset-room-card input[type=radio] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; }
-  .asset-room-name { font-weight: 600; color: var(--text); flex: 1; }
-  .asset-room-meta { font-size: 11px; color: var(--text3); }
-  .asset-score-badge {
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: 20px;
-    background: rgba(99,102,241,0.15);
-    color: var(--accent2);
-    flex-shrink: 0;
+  .asset-room-name { font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .asset-room-meta { font-size: 11px; color: var(--text3); flex-shrink: 0; }
+  .asset-suggest-badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 20px;
+    background: rgba(16,185,129,0.15); color: var(--green); flex-shrink: 0;
   }
-  .asset-picker-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .asset-empty { font-size: 12px; color: var(--text3); text-align: center; padding: 12px 0; }
+  .asset-picker-actions { display: flex; gap: 8px; margin-top: 4px; }
   .asset-picker-actions button {
-    padding: 7px 16px;
-    border-radius: var(--radius-sm);
-    border: none;
-    cursor: pointer;
-    font-family: Sarabun, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    transition: opacity 0.15s;
+    padding: 7px 16px; border-radius: var(--radius-sm); border: none;
+    cursor: pointer; font-family: Sarabun, sans-serif; font-size: 13px;
+    font-weight: 600; transition: opacity 0.15s;
   }
   .asset-picker-actions button:hover { opacity: 0.85; }
   .btn-asset-confirm { background: var(--accent); color: #fff; }
@@ -1039,7 +1037,7 @@ async function saveToNotion() {
       statuses.lastChild?.remove();
 
       if (!candidates.length) {
-        addNotionStatus(statuses, 'error', `⚠️ ไม่พบห้องที่ใกล้เคียง "${currentResult.property}" ใน AssetLiving`);
+        addNotionStatus(statuses, 'error', '⚠️ AssetLiving database ว่างเปล่าหรือโหลดไม่สำเร็จ');
       } else {
         const { chosen } = await showAssetPicker(candidates, currentResult, statuses);
         if (chosen) {
@@ -1182,7 +1180,7 @@ async function fetchAssetCandidates(r, dbId) {
   const pages = await fetchAllAssetPages(dbId);
   if (!pages.length) return [];
 
-  const scored = pages.map(p => {
+  return pages.map(p => {
     const textValues = [];
     for (const val of Object.values(p.properties || {})) {
       if (val.type === 'title' && val.title?.length) textValues.push(val.title[0].plain_text);
@@ -1190,9 +1188,7 @@ async function fetchAssetCandidates(r, dbId) {
     }
     const score = textValues.length ? Math.max(...textValues.map(c => roomMatchScore(c, r.property))) : 0;
     return { page: p, score, ...getAssetPageMeta(p) };
-  });
-
-  return scored.sort((a, b) => b.score - a.score).slice(0, 3).filter(c => c.score > 0);
+  }).sort((a, b) => b.score - a.score); // ห้องที่ AI แนะนำขึ้นก่อน
 }
 
 async function patchAssetPage(pageId, r) {
@@ -1207,35 +1203,61 @@ async function patchAssetPage(pageId, r) {
   return res.ok;
 }
 
-function showAssetPicker(candidates, r, container) {
+function renderAssetRoomCards(allRooms, filterText, wrap) {
+  const q = filterText.trim().toLowerCase();
+  const filtered = q
+    ? allRooms.filter(c => c.name.toLowerCase().includes(q) || (c.rent && String(c.rent).includes(q)))
+    : allRooms;
+
+  const list = wrap.querySelector('.asset-room-list');
+  list.innerHTML = filtered.length ? filtered.map((c, i) => `
+    <label class="asset-room-card" data-idx="${allRooms.indexOf(c)}">
+      <input type="radio" name="asset-pick" value="${allRooms.indexOf(c)}" style="pointer-events:none;">
+      <span class="asset-room-name">${c.name}</span>
+      ${c.rent ? `<span class="asset-room-meta">฿${c.rent.toLocaleString()}/เดือน</span>` : ''}
+      ${c.score >= 60 ? `<span class="asset-suggest-badge">แนะนำ</span>` : ''}
+    </label>
+  `).join('') : `<div class="asset-empty">ไม่พบห้องที่ตรงกับ "${q}"</div>`;
+
+  list.querySelectorAll('.asset-room-card').forEach(card => {
+    card.onclick = () => {
+      list.querySelectorAll('.asset-room-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      card.querySelector('input').checked = true;
+      wrap.querySelector('#btn-asset-confirm').disabled = false;
+    };
+  });
+}
+
+function showAssetPicker(allRooms, r, container) {
   return new Promise(resolve => {
     const wrap = document.createElement('div');
     wrap.className = 'asset-picker';
     wrap.innerHTML = `
-      <div class="asset-picker-label">🏠 เลือกห้องที่ต้องการอัปเดตใน AssetLiving</div>
-      ${candidates.map((c, i) => `
-        <label class="asset-room-card" id="arc-${i}" onclick="document.querySelectorAll('.asset-room-card').forEach(el=>el.classList.remove('selected'));this.classList.add('selected');document.getElementById('arc-radio-${i}').checked=true;document.getElementById('btn-asset-confirm').disabled=false;">
-          <input type="radio" name="asset-pick" id="arc-radio-${i}" value="${i}" style="pointer-events:none;">
-          <span class="asset-room-name">${c.name}</span>
-          ${c.rent ? `<span class="asset-room-meta">฿${c.rent.toLocaleString()}/เดือน</span>` : ''}
-          <span class="asset-score-badge">${c.score}%</span>
-        </label>
-      `).join('')}
+      <div class="asset-picker-label">🏠 เลือกห้องที่ต้องการอัปเดตใน AssetLiving (${allRooms.length} ห้อง)</div>
+      <input class="asset-search" placeholder="🔍 พิมพ์ชื่อห้องหรือค่าเช่าเพื่อกรอง..." autocomplete="off">
+      <div class="asset-room-list"></div>
       <div class="asset-picker-actions">
-        <button class="btn-asset-confirm" id="btn-asset-confirm" disabled>ยืนยัน</button>
+        <button class="btn-asset-confirm" id="btn-asset-confirm" disabled>✔ ยืนยัน</button>
         <button class="btn-asset-skip" id="btn-asset-skip">ข้าม</button>
       </div>
     `;
     container.appendChild(wrap);
+    renderAssetRoomCards(allRooms, '', wrap);
 
-    document.getElementById('btn-asset-confirm').onclick = async () => {
+    wrap.querySelector('.asset-search').oninput = e => {
+      renderAssetRoomCards(allRooms, e.target.value, wrap);
+      wrap.querySelector('#btn-asset-confirm').disabled = true;
+    };
+
+    wrap.querySelector('#btn-asset-confirm').onclick = () => {
       const checked = wrap.querySelector('input[name="asset-pick"]:checked');
       if (!checked) return;
-      const chosen = candidates[+checked.value];
+      const chosen = allRooms[+checked.value];
       wrap.remove();
       resolve({ chosen });
     };
-    document.getElementById('btn-asset-skip').onclick = () => {
+    wrap.querySelector('#btn-asset-skip').onclick = () => {
       wrap.remove();
       resolve({ chosen: null });
     };
