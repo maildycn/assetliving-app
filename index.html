@@ -382,36 +382,6 @@
     <p>ระบบจัดการสัญญาเช่า · อัปโหลดสัญญา → AI อ่าน → บันทึก Notion อัตโนมัติ</p>
   </div>
 
-  <!-- Settings -->
-  <div id="settings-bar" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;cursor:pointer;" onclick="toggleSettings()">
-    <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
-      <span id="settings-dot" style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0;display:inline-block;"></span>
-      <span id="settings-text" style="color:var(--text2);">⚙️ ยังไม่ได้ตั้งค่า — กดเพื่อใส่ API Keys</span>
-    </div>
-    <span id="settings-arrow" style="color:var(--text3);font-size:12px;">▼</span>
-  </div>
-  <div class="settings-card" id="settings-panel" style="display:none;">
-    <div class="field">
-      <label>Anthropic API Key</label>
-      <input type="password" id="api-key" placeholder="sk-ant-..." oninput="save()">
-    </div>
-    <div class="field">
-      <label>Notion Token</label>
-      <input type="password" id="notion-token" placeholder="ntn_..." oninput="save()">
-    </div>
-    <div class="field">
-      <label>Notion DB — สัญญาเช่า (LeaseAI)</label>
-      <input type="text" id="lease-db" placeholder="Database ID..." oninput="save()" value="0d3ce732aec048f298c93baa788b5306">
-    </div>
-    <div class="field">
-      <label>Notion DB — AssetLiving</label>
-      <input type="text" id="asset-db" placeholder="Database ID..." oninput="save()" value="2f4d4897dfba809596fedaf2fa3bf102">
-    </div>
-    <div style="grid-column:1/-1;">
-      <button class="btn btn-primary" style="margin-top:4px;" onclick="saveAndClose()">✓ บันทึกและซ่อนการตั้งค่า</button>
-    </div>
-  </div>
-
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('upload', this)">📤 อัปโหลดสัญญา</button>
@@ -612,91 +582,7 @@ function closePwModal() {
 }
 
 function init() {
-  // ใช้ BUILTIN_CONFIG เป็นค่าเริ่มต้น ถ้าไม่มีใน localStorage
-  const saved = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  const merged = {
-    notionToken: saved.notionToken || '',
-    leaseDb:     saved.leaseDb     || BUILTIN_CONFIG.leaseDb,
-    assetDb:     saved.assetDb     || BUILTIN_CONFIG.assetDb,
-  };
-  // บันทึก merged กลับเข้า localStorage
-  localStorage.setItem('lease_settings', JSON.stringify(merged));
-  if (merged.leaseDb) document.getElementById('lease-db').value = merged.leaseDb;
-  if (merged.assetDb) document.getElementById('asset-db').value = merged.assetDb;
-  updateSettingsBar();
   renderHistory();
-}
-
-function updateSettingsBar() {
-  const _s = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  const notionToken = _s.notionToken || document.getElementById('notion-token')?.value || '';
-  const dot  = document.getElementById('settings-dot');
-  const text = document.getElementById('settings-text');
-  if (apiKey && notionToken) {
-    dot.style.background = 'var(--green)';
-    text.textContent = '✅ ตั้งค่าแล้ว — กดเพื่อแก้ไข';
-    text.style.color = 'var(--text3)';
-    // ซ่อน panel และล้างค่าใน input เพื่อไม่ให้เห็น token
-    document.getElementById('settings-panel').style.display = 'none';
-    document.getElementById('settings-arrow').textContent = '▶';
-    // ล้าง input fields หลังบันทึก เพื่อซ่อน token จากหน้าจอ
-    document.getElementById('api-key').value = '';
-    document.getElementById('notion-token').value = '';
-  } else {
-    dot.style.background = 'var(--red)';
-    text.textContent = '⚙️ ยังไม่ได้ตั้งค่า — กดเพื่อใส่ API Keys';
-    text.style.color = 'var(--text2)';
-    document.getElementById('settings-panel').style.display = 'grid';
-    document.getElementById('settings-arrow').textContent = '▼';
-  }
-}
-
-function toggleSettings() {
-  const panel = document.getElementById('settings-panel');
-  const arrow = document.getElementById('settings-arrow');
-  const saved = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  if (panel.style.display === 'none') {
-    // เมื่อเปิด panel ให้ใส่ placeholder แทน ไม่แสดงค่าจริง
-    document.getElementById('api-key').placeholder = saved.apiKey ? 'sk-ant-... (บันทึกแล้ว)' : 'sk-ant-...';
-    document.getElementById('notion-token').placeholder = saved.notionToken ? 'ntn_... (บันทึกแล้ว)' : 'ntn_...';
-    document.getElementById('api-key').value = '';
-    document.getElementById('notion-token').value = '';
-    panel.style.display = 'grid';
-    arrow.textContent = '▼';
-  } else {
-    panel.style.display = 'none';
-    arrow.textContent = '▶';
-  }
-}
-
-function toggleSettings() {
-  const panel = document.getElementById('settings-panel');
-  const arrow = document.getElementById('settings-arrow');
-  if (panel.style.display === 'none') {
-    panel.style.display = 'grid';
-    arrow.textContent = '▼';
-  } else {
-    panel.style.display = 'none';
-    arrow.textContent = '▶';
-  }
-}
-
-function saveAndClose() {
-  save();
-  updateSettingsBar();
-}
-
-function save() {
-  const prev = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  const newApiKey = document.getElementById('api-key').value;
-  const newNotionToken = document.getElementById('notion-token').value;
-  localStorage.setItem('lease_settings', JSON.stringify({
-    apiKey:      newApiKey || prev.apiKey || '',
-    notionToken: newNotionToken || prev.notionToken || '',
-    leaseDb:     document.getElementById('lease-db').value,
-    assetDb:     document.getElementById('asset-db').value,
-  }));
-  updateSettingsBar();
 }
 
 // ---- Tabs ----
@@ -747,22 +633,18 @@ function formatSize(bytes) {
 
 // ---- Analyze ----
 async function analyzeAll() {
-  const settings = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  const apiKey = settings.apiKey || document.getElementById('api-key').value;
-  if (!apiKey) return alert('กรุณาใส่ Anthropic API Key ก่อนครับ');
-
   document.getElementById('btn-analyze').disabled = true;
   document.getElementById('result-card').classList.remove('show');
   document.getElementById('batch-summary').classList.remove('show');
 
   if (files.length === 1) {
-    await analyzeSingle(files[0], apiKey);
+    await analyzeSingle(files[0]);
   } else {
-    await analyzeBatch(files, apiKey);
+    await analyzeBatch(files);
   }
 }
 
-async function analyzeSingle(file, apiKey) {
+async function analyzeSingle(file) {
   const prog = document.getElementById('progress-card');
   prog.classList.add('show');
   setProgress([
@@ -777,7 +659,7 @@ async function analyzeSingle(file, apiKey) {
     const mime = getMime(file);
     updateStep('p1', 'done'); updateStep('p2', 'active');
 
-    const result = await callClaude(apiKey, b64, mime, file.name);
+    const result = await callClaude(b64, mime, file.name);
     updateStep('p2', 'done'); updateStep('p3', 'active');
 
     currentResult = result;
@@ -798,7 +680,7 @@ async function analyzeSingle(file, apiKey) {
   }
 }
 
-async function analyzeBatch(fileList, apiKey) {
+async function analyzeBatch(fileList) {
   const prog = document.getElementById('progress-card');
   const batch = document.getElementById('batch-summary');
   prog.classList.add('show');
@@ -811,7 +693,7 @@ async function analyzeBatch(fileList, apiKey) {
     try {
       const b64  = await toBase64(f);
       const mime = getMime(f);
-      const r = await callClaude(apiKey, b64, mime, f.name);
+      const r = await callClaude(b64, mime, f.name);
       r._fileName = f.name;
       r._file = f;
       results.push({ file: f.name, result: r, ok: true });
@@ -840,30 +722,19 @@ function renderBatchResults(results) {
     </div>
   `).join('');
 
-  // บันทึกทั้งหมดพร้อมกัน
   const okResults = results.filter(r => r.ok);
   if (okResults.length > 0) {
-    const notionToken = document.getElementById('notion-token').value;
-    const leaseDbId   = document.getElementById('lease-db').value;
-    const assetDbId   = document.getElementById('asset-db').value;
-    if (notionToken) {
-      list.innerHTML += `<div style="margin-top:12px;"><button class="btn btn-success" onclick="saveBatch(window._batchResults)">💾 บันทึกทั้งหมด ${okResults.length} รายการลง Notion</button></div>`;
-      window._batchResults = okResults.map(r => r.result);
-    }
+    list.innerHTML += `<div style="margin-top:12px;"><button class="btn btn-success" onclick="saveBatch(window._batchResults)">💾 บันทึกทั้งหมด ${okResults.length} รายการลง Notion</button></div>`;
+    window._batchResults = okResults.map(r => r.result);
   }
 }
 
 async function saveBatch(results) {
-  const batchSettings = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  const notionToken = batchSettings.notionToken || document.getElementById('notion-token').value;
-  const leaseDbId   = batchSettings.leaseDb || document.getElementById('lease-db').value;
-  const assetDbId   = batchSettings.assetDb || document.getElementById('asset-db').value;
-
   let saved = 0;
   for (const r of results) {
     try {
-      await saveLeaseAI(r, notionToken, leaseDbId);
-      if (r.property && r.end_date) await updateAssetLiving(r, notionToken, assetDbId);
+      await saveLeaseAI(r, BUILTIN_CONFIG.leaseDb);
+      if (r.property && r.end_date) await updateAssetLiving(r, BUILTIN_CONFIG.assetDb);
       saved++;
       addToHistory(r, 'saved');
     } catch(e) {
@@ -875,7 +746,7 @@ async function saveBatch(results) {
 }
 
 // ---- Claude API ----
-async function callClaude(apiKey, b64, mime, fileName) {
+async function callClaude(b64, mime, fileName) {
   const prompt = `คุณเป็น AI ผู้เชี่ยวชาญด้านการอ่านและวิเคราะห์สัญญาเช่าอสังหาริมทรัพย์ไทย มีความแม่นยำสูงมาก
 
 ## ขั้นตอนการอ่าน (ทำตามลำดับ)
@@ -978,13 +849,6 @@ function showResult(r, fileName) {
 // ---- Save to Notion ----
 async function saveToNotion() {
   if (!currentResult) return;
-  const settings = JSON.parse(localStorage.getItem('lease_settings') || '{}');
-  const notionToken = settings.notionToken || document.getElementById('notion-token').value;
-  const leaseDbId   = settings.leaseDb || document.getElementById('lease-db').value;
-  const assetDbId   = settings.assetDb || document.getElementById('asset-db').value;
-
-  if (!notionToken) return alert('กรุณาใส่ Notion Token ก่อนครับ');
-
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
   btn.textContent = '⏳ กำลังบันทึก...';
@@ -992,10 +856,9 @@ async function saveToNotion() {
   const statuses = document.getElementById('notion-statuses');
   statuses.innerHTML = '';
 
-  // 1) บันทึกลง LeaseAI สัญญาเช่า
   addNotionStatus(statuses, 'saving', '📄 กำลังบันทึกลง LeaseAI — สัญญาเช่า...');
   try {
-    await saveLeaseAI(currentResult, notionToken, leaseDbId);
+    await saveLeaseAI(currentResult, BUILTIN_CONFIG.leaseDb);
     statuses.innerHTML = '';
     addNotionStatus(statuses, 'saved', '✅ บันทึกลง LeaseAI — สัญญาเช่า เรียบร้อยแล้ว');
   } catch(e) {
@@ -1003,11 +866,10 @@ async function saveToNotion() {
     addNotionStatus(statuses, 'error', '❌ บันทึก LeaseAI ไม่สำเร็จ: ' + e.message);
   }
 
-  // 2) อัปเดต AssetLiving (เฉพาะชื่อห้อง + วันหมดสัญญา)
   if (currentResult.property && currentResult.end_date) {
     addNotionStatus(statuses, 'saving', '🏠 กำลังอัปเดต AssetLiving...');
     try {
-      const updated = await updateAssetLiving(currentResult, notionToken, assetDbId);
+      const updated = await updateAssetLiving(currentResult, BUILTIN_CONFIG.assetDb);
       addNotionStatus(statuses, updated ? 'saved' : 'error',
         updated ? `✅ อัปเดต AssetLiving — ${currentResult.property} เรียบร้อยแล้ว`
                 : `⚠️ ไม่พบห้อง "${currentResult.property}" ใน AssetLiving`);
@@ -1018,12 +880,11 @@ async function saveToNotion() {
 
   addToHistory(currentResult, 'saved');
   renderHistory();
-
   btn.textContent = '✅ บันทึกเรียบร้อย';
   btn.style.background = 'linear-gradient(135deg, var(--green), #059669)';
 }
 
-async function saveLeaseAI(r, token, dbId) {
+async function saveLeaseAI(r, dbId) {
   const props = {
     'ชื่อผู้เช่า':        { title:     [{ text: { content: r.tenant_name || 'ไม่ระบุ' } }] },
     'ทรัพย์สิน / ห้อง':  { rich_text: [{ text: { content: r.property || '' } }] },
@@ -1046,7 +907,7 @@ async function saveLeaseAI(r, token, dbId) {
   if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
 }
 
-async function updateAssetLiving(r, token, dbId) {
+async function updateAssetLiving(r, dbId) {
   // ค้นหาห้องใน AssetLiving ผ่าน proxy
   const qRes = await fetch('/api/notion', {
     method: 'POST',
