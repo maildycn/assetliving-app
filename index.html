@@ -1164,7 +1164,7 @@ async function saveLeaseAI(r, dbId) {
   if (r._file) {
     try {
       const fileUrl = await uploadFile(r._file);
-      props['ไฟล์สัญญา'] = { files: [{ name: r._file.name, type: 'external', external: { url: fileUrl } }] };
+      props['ต้นฉบับสัญญา'] = { files: [{ name: r._file.name, type: 'external', external: { url: fileUrl } }] };
     } catch { /* บันทึกข้อมูลโดยไม่มีไฟล์แนบถ้าอัปโหลดไม่สำเร็จ */ }
   }
 
