@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeaseAI — อ่านสัญญาเช่า</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c12;
+    --surface: #13161f;
+    --surface2: #1c2030;
+    --surface3: #232840;
+    --border: rgba(255,255,255,0.06);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --text: #f1f5f9;
+    --text2: #94a3b8;
+    --text3: #475569;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Sarabun', sans-serif;
+    min-height: 100vh;
+    padding: 24px 16px 40px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .header-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 99px;
+    padding: 8px 20px;
+    margin-bottom: 16px;
+  }
+  .header-logo span { font-size: 18px; }
+  .header-logo p { font-size: 13px; font-weight: 500; color: var(--accent2); }
+  .header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+  .header p { font-size: 14px; color: var(--text2); }
+
+  .container { max-width: 760px; margin: 0 auto; }
+
+  /* Settings */
+  .settings-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: 'Sarabun', sans-serif;
+    font-size: 13px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border 0.2s;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field input::placeholder { color: var(--text3); }
+  .field-full { grid-column: 1 / -1; }
+
+  /* Upload */
+  .upload-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .upload-card h3 {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(99,102,241,0.04); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-text { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .upload-sub { font-size: 12px; color: var(--text3); }
+
+  .file-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .file-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .file-item-icon { font-size: 18px; flex-shrink: 0; }
+  .file-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-item-size { font-size: 11px; color: var(--text3); flex-shrink: 0; }
+  .file-remove {
+    background: none; border: none; color: var(--text3); cursor: pointer;
+    font-size: 16px; padding: 2px; flex-shrink: 0;
+    transition: color 0.15s;
+  }
+  .file-remove:hover { color: var(--red); }
+
+  /* Btn */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    border: none;
+    font-family: 'Sarabun', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    margin-top: 12px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #4f46e5);
+    color: #fff;
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-success {
+    background: linear-gradient(135deg, var(--green), #059669);
+    color: #fff;
+  }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    margin-top: 8px;
+  }
+
+  /* Progress */
+  .progress-card {
+    background: var(--surface);
+    border: 1px solid rgba(99,102,241,0.3);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .progress-card.show { display: block; }
+  .progress-steps { display: flex; flex-direction: column; gap: 8px; }
+  .progress-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text3);
+    transition: color 0.3s;
+  }
+  .progress-step.active { color: var(--accent2); }
+  .progress-step.done { color: var(--green); }
+  .step-icon { font-size: 16px; width: 20px; text-align: center; }
+  .spinner-sm {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(99,102,241,0.3);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result */
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .result-card.show { display: block; }
+  .result-header {
+    padding: 14px 16px;
+    background: rgba(16,185,129,0.08);
+    border-bottom: 1px solid rgba(16,185,129,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .result-header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--green); }
+  .result-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    background: rgba(16,185,129,0.15);
+    color: var(--green);
+    border: 1px solid rgba(16,185,129,0.25);
+  }
+  .result-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-section:last-child { border-bottom: none; }
+  .result-section-title {
+    font-size: 11px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+  }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .result-field { }
+  .result-field-label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+  .result-field-value {
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 7px 10px;
+    min-height: 32px;
+    word-break: break-all;
+  }
+  .result-field-full { grid-column: 1 / -1; }
+  .result-field-value.highlight { color: var(--accent2); }
+  .result-field-value.danger { color: var(--red); }
+  .result-field-value.success { color: var(--green); }
+
+  /* Notion status */
+  .notion-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .notion-status.saving { background: rgba(99,102,241,0.08); color: var(--accent2); border: 1px solid rgba(99,102,241,0.2); }
+  .notion-status.saved { background: rgba(16,185,129,0.08); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+  .notion-status.error { background: rgba(239,68,68,0.08); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+
+  /* Multi file results */
+  .batch-summary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .batch-summary.show { display: block; }
+  .batch-title { font-size: 14px; font-weight: 500; margin-bottom: 12px; }
+  .batch-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .batch-item:last-child { border-bottom: none; }
+  .badge-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--green); }
+  .dot-red { background: var(--red); }
+  .dot-amber { background: var(--amber); }
+
+  .warn-box {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--amber);
+    margin-top: 10px;
+    display: none;
+  }
+  .warn-box.show { display: block; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; background: var(--surface); border-radius: var(--radius-sm); padding: 4px; }
+  .tab-btn {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text3);
+    font-family: 'Sarabun', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn.active { background: var(--accent); color: #fff; font-weight: 500; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* History */
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .history-item:hover { opacity: 0.8; }
+  .history-item:last-child { border-bottom: none; }
+  .history-info { flex: 1; min-width: 0; }
+  .history-name { font-weight: 500; }
+  .history-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .history-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    flex-shrink: 0;
+  }
+  .badge-green-sm { background: rgba(16,185,129,0.12); color: var(--green); }
+  .badge-red-sm { background: rgba(239,68,68,0.12); color: var(--red); }
+  .badge-amber-sm { background: rgba(245,158,11,0.12); color: var(--amber); }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px;
+    color: var(--text3);
+    font-size: 13px;
+  }
+  .empty-icon { font-size: 32px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div class="header-logo">
+      <span>📄</span>
+      <p>AssetLiving</p>
+    </div>
+    <h1>AssetLiving</h1>
+    <p>ระบบจัดการสัญญาเช่า · อัปโหลดสัญญา → AI อ่าน → บันทึก Notion อัตโนมัติ</p>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings-bar" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;cursor:pointer;" onclick="toggleSettings()">
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+      <span id="settings-dot" style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0;display:inline-block;"></span>
+      <span id="settings-text" style="color:var(--text2);">⚙️ ยังไม่ได้ตั้งค่า — กดเพื่อใส่ API Keys</span>
+    </div>
+    <span id="settings-arrow" style="color:var(--text3);font-size:12px;">▼</span>
+  </div>
+  <div class="settings-card" id="settings-panel" style="display:none;">
+    <div class="field">
+      <label>Anthropic API Key</label>
+      <input type="password" id="api-key" placeholder="sk-ant-..." oninput="save()">
+    </div>
+    <div class="field">
+      <label>Notion Token</label>
+      <input type="password" id="notion-token" placeholder="ntn_..." oninput="save()">
+    </div>
+    <div class="field">
+      <label>Notion DB — สัญญาเช่า (LeaseAI)</label>
+      <input type="text" id="lease-db" placeholder="Database ID..." oninput="save()" value="0d3ce732aec048f298c93baa788b5306">
+    </div>
+    <div class="field">
+      <label>Notion DB — AssetLiving</label>
+      <input type="text" id="asset-db" placeholder="Database ID..." oninput="save()" value="2f4d4897dfba809596fedaf2fa3bf102">
+    </div>
+    <div style="grid-column:1/-1;">
+      <button class="btn btn-primary" style="margin-top:4px;" onclick="saveAndClose()">✓ บันทึกและซ่อนการตั้งค่า</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('upload', this)">📤 อัปโหลดสัญญา</button>
+    <button class="tab-btn" onclick="requestHistory(this)">🔒 ประวัติ</button>
+  </div>
+
+  <!-- Password Modal -->
+  <div id="pw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:24px;width:90%;max-width:360px;">
+      <div style="font-size:16px;font-weight:600;margin-bottom:6px;">🔒 ป้อนรหัสผ่าน</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">ประวัติสัญญาเป็นข้อมูลส่วนตัว</div>
+      <input type="password" id="pw-input" placeholder="รหัสผ่าน..." style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:Sarabun,sans-serif;font-size:14px;padding:10px 14px;outline:none;margin-bottom:10px;" onkeydown="if(event.key==='Enter')checkPw()">
+      <div id="pw-error" style="font-size:12px;color:var(--red);margin-bottom:10px;display:none;">รหัสผ่านไม่ถูกต้อง</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="checkPw()" style="flex:1;padding:10px;background:linear-gradient(135deg,var(--accent),#4f46e5);color:#fff;border:none;border-radius:var(--radius-sm);font-family:Sarabun,sans-serif;font-size:14px;cursor:pointer;">ยืนยัน</button>
+        <button onclick="closePwModal()" style="flex:1;padding:10px;background:var(--surface2);color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius-sm);font-family:Sarabun,sans-serif;font-size:14px;cursor:pointer;">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOAD TAB -->
+  <div class="tab-panel active" id="tab-upload">
+
+    <div class="upload-card">
+      <h3>📎 เลือกไฟล์สัญญาเช่า</h3>
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple onchange="handleFiles(this.files)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">คลิกหรือลากไฟล์มาวางที่นี่</div>
+        <div class="upload-sub">รองรับ PDF, JPG, PNG, Word · อัปโหลดหลายไฟล์พร้อมกันได้</div>
+      </div>
+      <div class="file-list" id="file-list"></div>
+      <button class="btn btn-primary" id="btn-analyze" disabled onclick="analyzeAll()">
+        ✦ ให้ AI อ่านสัญญา
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-card" id="progress-card">
+      <div class="progress-steps" id="progress-steps"></div>
+    </div>
+
+    <!-- Batch Summary -->
+    <div class="batch-summary" id="batch-summary">
+      <div class="batch-title">📊 สรุปผลการอ่านสัญญา</div>
+      <div id="batch-list"></div>
+    </div>
+
+    <!-- Single Result -->
+    <div class="result-card" id="result-card">
+      <div class="result-header">
+        <div class="result-header-left">✓ AI อ่านสัญญาเสร็จแล้ว</div>
+        <span class="result-badge" id="result-file-name">—</span>
+      </div>
+
+      <div class="result-section">
+        <div class="result-section-title">ข้อมูลผู้เช่า (เก็บใน LeaseAI เท่านั้น 🔒)</div>
+        <div class="result-grid">
+          <div class="result-field">
+            <div class="result-field-label">ชื่อ-นามสกุลผู้เช่า</div>
+            <div class="result-field-value highlight" id="r-tenant">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">เบอร์โทรศัพท์</div>
+            <div class="result-field-value" id="r-phone">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">อีเมล</div>
+            <div class="result-field-value" id="r-email">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">เลขบัตรประชาชน</div>
+            <div class="result-field-value" id="r-id">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <div class="result-section-title">ข้อมูลสัญญา</div>
+        <div class="result-grid">
+          <div class="result-field">
+            <div class="result-field-label">ทรัพย์สิน / ห้อง</div>
+            <div class="result-field-value highlight" id="r-property">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">ค่าเช่า/เดือน</div>
+            <div class="result-field-value" id="r-rent">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">วันเริ่มสัญญา</div>
+            <div class="result-field-value" id="r-start">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">วันหมดสัญญา</div>
+            <div class="result-field-value danger" id="r-end">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">เงินมัดจำ</div>
+            <div class="result-field-value" id="r-deposit">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">ระยะสัญญา</div>
+            <div class="result-field-value" id="r-duration">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">ผู้ให้เช่า</div>
+            <div class="result-field-value" id="r-landlord">—</div>
+          </div>
+          <div class="result-field">
+            <div class="result-field-label">สถานะสัญญา</div>
+            <div class="result-field-value" id="r-status">—</div>
+          </div>
+          <div class="result-field result-field-full">
+            <div class="result-field-label">ค่าน้ำ / ค่าไฟ</div>
+            <div class="result-field-value" id="r-utilities">—</div>
+          </div>
+          <div class="result-field result-field-full">
+            <div class="result-field-label">เงื่อนไขพิเศษ</div>
+            <div class="result-field-value" id="r-notes">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <div class="result-section-title">บันทึกลง Notion</div>
+        <div id="notion-statuses"></div>
+        <div class="warn-box" id="warn-box"></div>
+        <button class="btn btn-success" id="btn-save" onclick="saveToNotion()">
+          💾 บันทึกลง Notion
+        </button>
+        <button class="btn btn-outline" onclick="resetForm()">อ่านสัญญาใหม่</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="tab-panel" id="tab-history">
+    <div class="upload-card">
+      <h3>📋 ประวัติสัญญาที่อ่านแล้ว</h3>
+      <div id="history-list">
+        <div class="empty-state">
+          <div class="empty-icon">📄</div>
+          <div>ยังไม่มีสัญญาที่อ่านแล้วครับ</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+  // ── Built-in Config (API keys are server-side — env vars only) ──
+  const BUILTIN_CONFIG = {
+    leaseDb: '0d3ce732aec048f298c93baa788b5306',
+    assetDb: '2f4d4897dfba809596fedaf2fa3bf102',
+  };
+
+// ---- State ----
+let files = [];
+let currentResult = null;
+let history = JSON.parse(localStorage.getItem('lease_history') || '[]');
+
+// ---- Init ----
+// ---- Password ----
+const HISTORY_PASSWORD = 'assetliving2026';
+let historyUnlocked = false;
+let historyTabEl = null;
+
+function requestHistory(el) {
+  historyTabEl = el;
+  if (historyUnlocked) {
+    switchTab('history', el);
+    return;
+  }
+  document.getElementById('pw-modal').style.display = 'flex';
+  document.getElementById('pw-input').value = '';
+  document.getElementById('pw-error').style.display = 'none';
+  setTimeout(() => document.getElementById('pw-input').focus(), 100);
+}
+
+function checkPw() {
+  const val = document.getElementById('pw-input').value;
+  if (val === HISTORY_PASSWORD) {
+    historyUnlocked = true;
+    closePwModal();
+    if (historyTabEl) switchTab('history', historyTabEl);
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+    document.getElementById('pw-input').value = '';
+    document.getElementById('pw-input').focus();
+  }
+}
+
+function closePwModal() {
+  document.getElementById('pw-modal').style.display = 'none';
+}
+
+function init() {
+  // ใช้ BUILTIN_CONFIG เป็นค่าเริ่มต้น ถ้าไม่มีใน localStorage
+  const saved = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  const merged = {
+    notionToken: saved.notionToken || '',
+    leaseDb:     saved.leaseDb     || BUILTIN_CONFIG.leaseDb,
+    assetDb:     saved.assetDb     || BUILTIN_CONFIG.assetDb,
+  };
+  // บันทึก merged กลับเข้า localStorage
+  localStorage.setItem('lease_settings', JSON.stringify(merged));
+  if (merged.leaseDb) document.getElementById('lease-db').value = merged.leaseDb;
+  if (merged.assetDb) document.getElementById('asset-db').value = merged.assetDb;
+  updateSettingsBar();
+  renderHistory();
+}
+
+function updateSettingsBar() {
+  const _s = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  const notionToken = _s.notionToken || document.getElementById('notion-token')?.value || '';
+  const dot  = document.getElementById('settings-dot');
+  const text = document.getElementById('settings-text');
+  if (apiKey && notionToken) {
+    dot.style.background = 'var(--green)';
+    text.textContent = '✅ ตั้งค่าแล้ว — กดเพื่อแก้ไข';
+    text.style.color = 'var(--text3)';
+    // ซ่อน panel และล้างค่าใน input เพื่อไม่ให้เห็น token
+    document.getElementById('settings-panel').style.display = 'none';
+    document.getElementById('settings-arrow').textContent = '▶';
+    // ล้าง input fields หลังบันทึก เพื่อซ่อน token จากหน้าจอ
+    document.getElementById('api-key').value = '';
+    document.getElementById('notion-token').value = '';
+  } else {
+    dot.style.background = 'var(--red)';
+    text.textContent = '⚙️ ยังไม่ได้ตั้งค่า — กดเพื่อใส่ API Keys';
+    text.style.color = 'var(--text2)';
+    document.getElementById('settings-panel').style.display = 'grid';
+    document.getElementById('settings-arrow').textContent = '▼';
+  }
+}
+
+function toggleSettings() {
+  const panel = document.getElementById('settings-panel');
+  const arrow = document.getElementById('settings-arrow');
+  const saved = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  if (panel.style.display === 'none') {
+    // เมื่อเปิด panel ให้ใส่ placeholder แทน ไม่แสดงค่าจริง
+    document.getElementById('api-key').placeholder = saved.apiKey ? 'sk-ant-... (บันทึกแล้ว)' : 'sk-ant-...';
+    document.getElementById('notion-token').placeholder = saved.notionToken ? 'ntn_... (บันทึกแล้ว)' : 'ntn_...';
+    document.getElementById('api-key').value = '';
+    document.getElementById('notion-token').value = '';
+    panel.style.display = 'grid';
+    arrow.textContent = '▼';
+  } else {
+    panel.style.display = 'none';
+    arrow.textContent = '▶';
+  }
+}
+
+function toggleSettings() {
+  const panel = document.getElementById('settings-panel');
+  const arrow = document.getElementById('settings-arrow');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'grid';
+    arrow.textContent = '▼';
+  } else {
+    panel.style.display = 'none';
+    arrow.textContent = '▶';
+  }
+}
+
+function saveAndClose() {
+  save();
+  updateSettingsBar();
+}
+
+function save() {
+  const prev = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  const newApiKey = document.getElementById('api-key').value;
+  const newNotionToken = document.getElementById('notion-token').value;
+  localStorage.setItem('lease_settings', JSON.stringify({
+    apiKey:      newApiKey || prev.apiKey || '',
+    notionToken: newNotionToken || prev.notionToken || '',
+    leaseDb:     document.getElementById('lease-db').value,
+    assetDb:     document.getElementById('asset-db').value,
+  }));
+  updateSettingsBar();
+}
+
+// ---- Tabs ----
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ---- File Handling ----
+function handleFiles(fileList) {
+  files = [...files, ...Array.from(fileList)];
+  renderFileList();
+  document.getElementById('btn-analyze').disabled = files.length === 0;
+}
+
+function renderFileList() {
+  const list = document.getElementById('file-list');
+  list.innerHTML = files.map((f, i) => `
+    <div class="file-item">
+      <span class="file-item-icon">${getFileIcon(f.name)}</span>
+      <span class="file-item-name">${f.name}</span>
+      <span class="file-item-size">${formatSize(f.size)}</span>
+      <button class="file-remove" onclick="removeFile(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeFile(i) {
+  files.splice(i, 1);
+  renderFileList();
+  document.getElementById('btn-analyze').disabled = files.length === 0;
+}
+
+function getFileIcon(name) {
+  if (name.match(/\.pdf$/i)) return '📕';
+  if (name.match(/\.(jpg|jpeg|png)$/i)) return '🖼️';
+  if (name.match(/\.(doc|docx)$/i)) return '📝';
+  return '📄';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+// ---- Analyze ----
+async function analyzeAll() {
+  const settings = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  const apiKey = settings.apiKey || document.getElementById('api-key').value;
+  if (!apiKey) return alert('กรุณาใส่ Anthropic API Key ก่อนครับ');
+
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('result-card').classList.remove('show');
+  document.getElementById('batch-summary').classList.remove('show');
+
+  if (files.length === 1) {
+    await analyzeSingle(files[0], apiKey);
+  } else {
+    await analyzeBatch(files, apiKey);
+  }
+}
+
+async function analyzeSingle(file, apiKey) {
+  const prog = document.getElementById('progress-card');
+  prog.classList.add('show');
+  setProgress([
+    { id:'p1', label:'กำลังอ่านไฟล์สัญญา...', status:'active' },
+    { id:'p2', label:'AI วิเคราะห์เนื้อหา...', status:'wait' },
+    { id:'p3', label:'ดึงข้อมูลสำคัญ...', status:'wait' },
+    { id:'p4', label:'เตรียมบันทึก Notion...', status:'wait' },
+  ]);
+
+  try {
+    const b64  = await toBase64(file);
+    const mime = getMime(file);
+    updateStep('p1', 'done'); updateStep('p2', 'active');
+
+    const result = await callClaude(apiKey, b64, mime, file.name);
+    updateStep('p2', 'done'); updateStep('p3', 'active');
+
+    currentResult = result;
+    currentResult._fileName = file.name;
+    currentResult._file = file;
+
+    updateStep('p3', 'done'); updateStep('p4', 'active');
+    setTimeout(() => {
+      updateStep('p4', 'done');
+      prog.classList.remove('show');
+      showResult(result, file.name);
+    }, 600);
+
+  } catch(err) {
+    prog.classList.remove('show');
+    alert('เกิดข้อผิดพลาด: ' + err.message);
+    document.getElementById('btn-analyze').disabled = false;
+  }
+}
+
+async function analyzeBatch(fileList, apiKey) {
+  const prog = document.getElementById('progress-card');
+  const batch = document.getElementById('batch-summary');
+  prog.classList.add('show');
+  batch.classList.add('show');
+
+  const results = [];
+  for (let i = 0; i < fileList.length; i++) {
+    const f = fileList[i];
+    setProgress([{ id:'p1', label:`กำลังอ่าน ${i+1}/${fileList.length}: ${f.name}`, status:'active' }]);
+    try {
+      const b64  = await toBase64(f);
+      const mime = getMime(f);
+      const r = await callClaude(apiKey, b64, mime, f.name);
+      r._fileName = f.name;
+      r._file = f;
+      results.push({ file: f.name, result: r, ok: true });
+    } catch(e) {
+      results.push({ file: f.name, error: e.message, ok: false });
+    }
+  }
+
+  prog.classList.remove('show');
+  renderBatchResults(results);
+}
+
+function renderBatchResults(results) {
+  const list = document.getElementById('batch-list');
+  list.innerHTML = results.map(r => `
+    <div class="batch-item">
+      <div class="badge-dot ${r.ok ? 'dot-green' : 'dot-red'}"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.file}</div>
+        ${r.ok
+          ? `<div style="font-size:11px;color:var(--text3);">${r.result.tenant_name||'?'} · ${r.result.property||'?'} · ฿${(r.result.rent||0).toLocaleString()}</div>`
+          : `<div style="font-size:11px;color:var(--red);">${r.error}</div>`
+        }
+      </div>
+      ${r.ok ? `<span style="font-size:11px;color:var(--green);">✓ อ่านสำเร็จ</span>` : `<span style="font-size:11px;color:var(--red);">✗ ผิดพลาด</span>`}
+    </div>
+  `).join('');
+
+  // บันทึกทั้งหมดพร้อมกัน
+  const okResults = results.filter(r => r.ok);
+  if (okResults.length > 0) {
+    const notionToken = document.getElementById('notion-token').value;
+    const leaseDbId   = document.getElementById('lease-db').value;
+    const assetDbId   = document.getElementById('asset-db').value;
+    if (notionToken) {
+      list.innerHTML += `<div style="margin-top:12px;"><button class="btn btn-success" onclick="saveBatch(window._batchResults)">💾 บันทึกทั้งหมด ${okResults.length} รายการลง Notion</button></div>`;
+      window._batchResults = okResults.map(r => r.result);
+    }
+  }
+}
+
+async function saveBatch(results) {
+  const batchSettings = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  const notionToken = batchSettings.notionToken || document.getElementById('notion-token').value;
+  const leaseDbId   = batchSettings.leaseDb || document.getElementById('lease-db').value;
+  const assetDbId   = batchSettings.assetDb || document.getElementById('asset-db').value;
+
+  let saved = 0;
+  for (const r of results) {
+    try {
+      await saveLeaseAI(r, notionToken, leaseDbId);
+      if (r.property && r.end_date) await updateAssetLiving(r, notionToken, assetDbId);
+      saved++;
+      addToHistory(r, 'saved');
+    } catch(e) {
+      console.error('Save error:', e.message);
+    }
+  }
+  alert(`บันทึกสำเร็จ ${saved}/${results.length} รายการครับ`);
+  renderHistory();
+}
+
+// ---- Claude API ----
+async function callClaude(apiKey, b64, mime, fileName) {
+  const prompt = `คุณเป็น AI ผู้เชี่ยวชาญด้านการอ่านและวิเคราะห์สัญญาเช่าอสังหาริมทรัพย์ไทย มีความแม่นยำสูงมาก
+
+## ขั้นตอนการอ่าน (ทำตามลำดับ)
+1. อ่านเอกสารทั้งหมดอย่างละเอียดทีละบรรทัด
+2. ระบุส่วนที่เป็นข้อมูลผู้เช่า ผู้ให้เช่า ทรัพย์สิน และเงื่อนไข
+3. คัดลอกข้อความที่อ่านได้ **ตรงๆ** ห้ามเดาหรือแต่งเติม
+4. สำหรับชื่อ-นามสกุล: อ่านทีละตัวอักษร รวมคำนำหน้า (นาย/นาง/นางสาว/ด.ช./ด.ญ.)
+5. สำหรับตัวเลข: ระวังเลข 0 กับ O, เลข 1 กับ ก, เลขไทยกับเลขอารบิก
+6. สำหรับวันที่: แปลงเป็น YYYY-MM-DD เสมอ (ปีไทย พ.ศ. → ลบ 543 = ค.ศ.)
+
+## กฎสำคัญ
+- คัดลอกชื่อ-นามสกุลตรงๆ จากเอกสาร อย่าย่อหรือเปลี่ยนแปลง
+- ถ้าเห็นคำนำหน้าชื่อ ให้ใส่ด้วย เช่น "นายสมชาย ใจดี"
+- เลขบัตรประชาชน 13 หลัก คัดลอกให้ครบ
+- ค่าเช่าและเงินมัดจำ: ตัวเลขล้วน ไม่มีเครื่องหมาย ไม่มี comma
+- ถ้าไม่แน่ใจ หรืออ่านไม่ออก ให้ใส่ null อย่าเดา
+
+## รูปแบบที่ต้องตอบ (JSON เท่านั้น ไม่มีข้อความอื่นนำหน้าหรือตามหลัง)
+{
+  "tenant_name": "คำนำหน้า+ชื่อ+นามสกุลผู้เช่า เช่น นายสมชาย ใจดี",
+  "tenant_phone": "เบอร์โทรผู้เช่า เช่น 0812345678",
+  "tenant_email": "อีเมลผู้เช่า หรือ null",
+  "tenant_id": "เลขบัตรประชาชน 13 หลัก หรือ null",
+  "landlord_name": "ชื่อ-นามสกุลผู้ให้เช่า",
+  "property": "ชื่อ/เลขห้อง/ที่อยู่ทรัพย์สินที่เช่า",
+  "rent": ตัวเลขค่าเช่ารายเดือน เช่น 8000,
+  "deposit": ตัวเลขเงินมัดจำ เช่น 16000,
+  "start_date": "YYYY-MM-DD วันเริ่มสัญญา",
+  "end_date": "YYYY-MM-DD วันสิ้นสุดสัญญา",
+  "duration_months": ระยะสัญญาเป็นเดือน เช่น 12,
+  "utilities": "ค่าน้ำค่าไฟ เช่น น้ำ 18บ/หน่วย ไฟ 8บ/หน่วย หรือ null",
+  "special_conditions": "เงื่อนไขพิเศษทั้งหมดที่พบ",
+  "contract_status": "ใช้งานอยู่ หรือ หมดอายุแล้ว",
+  "is_lease": true
+}
+หากไม่พบข้อมูลใดในเอกสาร ให้ใส่ null — ห้ามเดาหรือสร้างข้อมูลขึ้นมาเอง`;
+
+  const content = [];
+  if (mime.startsWith('image/')) {
+    content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } });
+  } else {
+    content.push({ type: 'document', source: { type: 'base64', media_type: mime, data: b64 } });
+  }
+  content.push({ type: 'text', text: prompt });
+
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4096, messages: [{ role: 'user', content }] })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || `API Error ${res.status}`);
+  }
+
+  const data = await res.json();
+  const text = data.content[0].text.trim().replace(/```json|```/g, '').trim();
+  return JSON.parse(text);
+}
+
+// ---- Show Result ----
+function showResult(r, fileName) {
+  document.getElementById('result-file-name').textContent = fileName;
+  document.getElementById('r-tenant').textContent   = r.tenant_name    || '—';
+  document.getElementById('r-phone').textContent    = r.tenant_phone   || '—';
+  document.getElementById('r-email').textContent    = r.tenant_email   || '—';
+  document.getElementById('r-id').textContent       = r.tenant_id      || '—';
+  document.getElementById('r-property').textContent = r.property       || '—';
+  document.getElementById('r-rent').textContent     = r.rent ? `฿${r.rent.toLocaleString()}/เดือน` : '—';
+  document.getElementById('r-deposit').textContent   = r.deposit ? `฿${r.deposit.toLocaleString()}` : '—';
+  document.getElementById('r-start').textContent     = r.start_date     || '—';
+  document.getElementById('r-end').textContent       = r.end_date       || '—';
+  document.getElementById('r-duration').textContent  = r.duration_months ? `${r.duration_months} เดือน` : '—';
+  document.getElementById('r-landlord').textContent  = r.landlord_name  || '—';
+  document.getElementById('r-utilities').textContent = r.utilities       || '—';
+  document.getElementById('r-notes').textContent     = r.special_conditions || '—';
+  document.getElementById('r-status').textContent    = r.contract_status || '—';
+
+  // ตรวจสอบวันหมดสัญญา
+  const warnBox = document.getElementById('warn-box');
+  if (r.end_date) {
+    const daysLeft = Math.ceil((new Date(r.end_date) - new Date()) / (1000*60*60*24));
+    if (daysLeft < 0) {
+      warnBox.textContent = `⚠️ สัญญาหมดอายุแล้ว ${Math.abs(daysLeft)} วัน`;
+      warnBox.classList.add('show');
+    } else if (daysLeft <= 30) {
+      warnBox.textContent = `⚠️ สัญญาจะหมดอายุใน ${daysLeft} วัน`;
+      warnBox.classList.add('show');
+    } else {
+      warnBox.classList.remove('show');
+    }
+  }
+
+  document.getElementById('notion-statuses').innerHTML = '';
+  document.getElementById('result-card').classList.add('show');
+  document.getElementById('btn-analyze').disabled = false;
+}
+
+// ---- Save to Notion ----
+async function saveToNotion() {
+  if (!currentResult) return;
+  const settings = JSON.parse(localStorage.getItem('lease_settings') || '{}');
+  const notionToken = settings.notionToken || document.getElementById('notion-token').value;
+  const leaseDbId   = settings.leaseDb || document.getElementById('lease-db').value;
+  const assetDbId   = settings.assetDb || document.getElementById('asset-db').value;
+
+  if (!notionToken) return alert('กรุณาใส่ Notion Token ก่อนครับ');
+
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = '⏳ กำลังบันทึก...';
+
+  const statuses = document.getElementById('notion-statuses');
+  statuses.innerHTML = '';
+
+  // 1) บันทึกลง LeaseAI สัญญาเช่า
+  addNotionStatus(statuses, 'saving', '📄 กำลังบันทึกลง LeaseAI — สัญญาเช่า...');
+  try {
+    await saveLeaseAI(currentResult, notionToken, leaseDbId);
+    statuses.innerHTML = '';
+    addNotionStatus(statuses, 'saved', '✅ บันทึกลง LeaseAI — สัญญาเช่า เรียบร้อยแล้ว');
+  } catch(e) {
+    statuses.innerHTML = '';
+    addNotionStatus(statuses, 'error', '❌ บันทึก LeaseAI ไม่สำเร็จ: ' + e.message);
+  }
+
+  // 2) อัปเดต AssetLiving (เฉพาะชื่อห้อง + วันหมดสัญญา)
+  if (currentResult.property && currentResult.end_date) {
+    addNotionStatus(statuses, 'saving', '🏠 กำลังอัปเดต AssetLiving...');
+    try {
+      const updated = await updateAssetLiving(currentResult, notionToken, assetDbId);
+      addNotionStatus(statuses, updated ? 'saved' : 'error',
+        updated ? `✅ อัปเดต AssetLiving — ${currentResult.property} เรียบร้อยแล้ว`
+                : `⚠️ ไม่พบห้อง "${currentResult.property}" ใน AssetLiving`);
+    } catch(e) {
+      addNotionStatus(statuses, 'error', '❌ อัปเดต AssetLiving ไม่สำเร็จ: ' + e.message);
+    }
+  }
+
+  addToHistory(currentResult, 'saved');
+  renderHistory();
+
+  btn.textContent = '✅ บันทึกเรียบร้อย';
+  btn.style.background = 'linear-gradient(135deg, var(--green), #059669)';
+}
+
+async function saveLeaseAI(r, token, dbId) {
+  const props = {
+    'ชื่อผู้เช่า':        { title:     [{ text: { content: r.tenant_name || 'ไม่ระบุ' } }] },
+    'ทรัพย์สิน / ห้อง':  { rich_text: [{ text: { content: r.property || '' } }] },
+    'เงื่อนไขพิเศษ':      { rich_text: [{ text: { content: r.special_conditions || '' } }] },
+    'สถานะสัญญา':        { select:    { name: r.contract_status || 'ใช้งานอยู่' } },
+    'สถานะการชำระ':      { select:    { name: 'รอชำระ' } },
+  };
+  if (r.rent)         props['ค่าเช่า (บาท/เดือน)'] = { number: r.rent };
+  if (r.deposit)      props['เงินมัดจำ (บาท)']     = { number: r.deposit };
+  if (r.tenant_phone) props['เบอร์โทรผู้เช่า']     = { phone_number: r.tenant_phone };
+  if (r.tenant_email) props['อีเมลผู้เช่า']        = { email: r.tenant_email };
+  if (r.start_date)   props['วันเริ่มสัญญา']       = { date: { start: r.start_date } };
+  if (r.end_date)     props['วันหมดสัญญา']         = { date: { start: r.end_date } };
+
+  const res = await fetch('/api/notion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method: 'POST', path: 'pages', data: { parent: { database_id: dbId }, properties: props } })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
+}
+
+async function updateAssetLiving(r, token, dbId) {
+  // ค้นหาห้องใน AssetLiving ผ่าน proxy
+  const qRes = await fetch('/api/notion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method: 'POST', path: `databases/${dbId}/query`, data: { page_size: 100 } })
+  });
+  const qData = await qRes.json();
+  const pages = qData.results || [];
+
+  const target = pages.find(p => {
+    const name = p.properties['ชื่อทรัพย์สิน']?.title?.[0]?.plain_text || '';
+    return name.toLowerCase().includes((r.property||'').toLowerCase()) ||
+           (r.property||'').toLowerCase().includes(name.toLowerCase());
+  });
+
+  if (!target) return false;
+
+  // อัปเดตเฉพาะวันหมดสัญญา
+  const updateProps = {};
+  if (r.end_date) updateProps['วันที่สิ้นสุดสัญญา'] = { date: { start: r.end_date } };
+
+  const uRes = await fetch('/api/notion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method: 'PATCH', path: `pages/${target.id}`, data: { properties: updateProps } })
+  });
+  return uRes.ok;
+}
+
+// ---- Helpers ----
+function addNotionStatus(container, type, text) {
+  const el = document.createElement('div');
+  el.className = `notion-status ${type}`;
+  el.innerHTML = type === 'saving' ? `<div class="spinner-sm"></div> ${text}` : text;
+  container.appendChild(el);
+}
+
+function setProgress(steps) {
+  const container = document.getElementById('progress-steps');
+  container.innerHTML = steps.map(s => `
+    <div class="progress-step ${s.status}" id="${s.id}">
+      ${s.status === 'active' ? '<div class="spinner-sm"></div>' : s.status === 'done' ? '<span class="step-icon">✓</span>' : '<span class="step-icon">○</span>'}
+      ${s.label}
+    </div>
+  `).join('');
+}
+
+function updateStep(id, status) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = `progress-step ${status}`;
+  el.innerHTML = el.innerHTML.replace(/<div class="spinner-sm"><\/div>|<span class="step-icon">.*?<\/span>/,
+    status === 'done' ? '<span class="step-icon">✓</span>' : status === 'active' ? '<div class="spinner-sm"></div>' : '<span class="step-icon">○</span>'
+  );
+}
+
+async function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function getMime(file) {
+  if (file.type) return file.type;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const map = { pdf:'application/pdf', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', doc:'application/msword', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  return map[ext] || 'application/octet-stream';
+}
+
+function addToHistory(r, status) {
+  history.unshift({ ...r, _savedAt: new Date().toISOString(), _status: status });
+  if (history.length > 50) history = history.slice(0, 50);
+  localStorage.setItem('lease_history', JSON.stringify(history));
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (history.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div>ยังไม่มีสัญญาที่อ่านแล้วครับ</div></div>';
+    return;
+  }
+  list.innerHTML = history.map((h, i) => {
+    const daysLeft = h.end_date ? Math.ceil((new Date(h.end_date) - new Date()) / (1000*60*60*24)) : null;
+    const badgeClass = daysLeft === null ? 'badge-green-sm' : daysLeft < 0 ? 'badge-red-sm' : daysLeft <= 30 ? 'badge-amber-sm' : 'badge-green-sm';
+    const badgeText  = daysLeft === null ? 'บันทึกแล้ว' : daysLeft < 0 ? 'หมดอายุแล้ว' : daysLeft <= 30 ? `หมดใน ${daysLeft} วัน` : 'ปกติ';
+    return `
+      <div class="history-item">
+        <div class="history-info">
+          <div class="history-name">${h.tenant_name||'ไม่ระบุชื่อ'}</div>
+          <div class="history-meta">${h.property||'?'} · ฿${(h.rent||0).toLocaleString()} · ${h.end_date||'ไม่ระบุวันหมด'}</div>
+        </div>
+        <span class="history-badge ${badgeClass}">${badgeText}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function resetForm() {
+  files = [];
+  currentResult = null;
+  renderFileList();
+  document.getElementById('result-card').classList.remove('show');
+  document.getElementById('batch-summary').classList.remove('show');
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('btn-save').disabled = false;
+  document.getElementById('btn-save').textContent = '💾 บันทึกลง Notion';
+  document.getElementById('btn-save').style.background = '';
+  document.getElementById('notion-statuses').innerHTML = '';
+  document.getElementById('warn-box').classList.remove('show');
+  document.getElementById('file-input').value = '';
+}
+
+// ---- Drag & Drop ----
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = ''; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.style.borderColor = '';
+  handleFiles(e.dataTransfer.files);
+});
+
+init();
+</script>
+</body>
+</html>
