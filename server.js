@@ -56,4 +56,45 @@ app.post('/api/notion', async (req, res) => {
   }
 });
 
+// ── Notion file upload proxy ──────────────────────────────────────────────────
+app.post('/api/notion-upload', async (req, res) => {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) return res.status(500).json({ error: 'NOTION_TOKEN not configured' });
+
+  const { filename, mimeType, data } = req.body; // data = base64 string
+  if (!data || !filename) return res.status(400).json({ error: 'filename and data required' });
+
+  try {
+    // Step 1: create file-upload record
+    const createRes = await fetch('https://api.notion.com/v1/file-uploads', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    const upload = await createRes.json();
+    if (!createRes.ok) return res.status(createRes.status).json(upload);
+
+    // Step 2: send file binary (Node 18+ has built-in FormData and Blob)
+    const fileBuffer = Buffer.from(data, 'base64');
+    const fd = new FormData();
+    fd.set('file', new Blob([fileBuffer], { type: mimeType || 'application/octet-stream' }), filename);
+
+    const sendRes = await fetch(`https://api.notion.com/v1/file-uploads/${upload.id}/send`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Notion-Version': '2022-06-28' },
+      body: fd,
+    });
+    const sendData = await sendRes.json();
+    if (!sendRes.ok) return res.status(sendRes.status).json(sendData);
+
+    res.json({ upload_id: upload.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => console.log(`AssetLiving running on port ${PORT}`));

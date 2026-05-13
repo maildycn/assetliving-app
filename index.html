@@ -1133,6 +1133,18 @@ async function saveToNotion() {
   btn.style.background = 'linear-gradient(135deg, var(--green), #059669)';
 }
 
+async function uploadFileToNotion(file) {
+  const b64 = await toBase64(file);
+  const res = await fetch('/api/notion-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, mimeType: file.type, data: b64 })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data.upload_id;
+}
+
 async function saveLeaseAI(r, dbId) {
   const props = {
     'ชื่อผู้เช่า':        { title:     [{ text: { content: r.tenant_name || 'ไม่ระบุ' } }] },
@@ -1147,6 +1159,14 @@ async function saveLeaseAI(r, dbId) {
   if (r.tenant_email) props['อีเมลผู้เช่า']        = { email: r.tenant_email };
   if (r.start_date)   props['วันเริ่มสัญญา']       = { date: { start: r.start_date } };
   if (r.end_date)     props['วันหมดสัญญา']         = { date: { start: r.end_date } };
+
+  // แนบไฟล์ต้นฉบับ (ถ้ามี) — อัปโหลดไป Notion แล้วใส่ใน property "ไฟล์สัญญา"
+  if (r._file) {
+    try {
+      const uploadId = await uploadFileToNotion(r._file);
+      props['ไฟล์สัญญา'] = { files: [{ type: 'file_upload', file_upload: { id: uploadId } }] };
+    } catch { /* ถ้าอัปโหลดไม่ได้ก็บันทึกโดยไม่มีไฟล์แนบ */ }
+  }
 
   const res = await fetch('/api/notion', {
     method: 'POST',
