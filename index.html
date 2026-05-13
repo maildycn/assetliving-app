@@ -1127,10 +1127,32 @@ async function saveToNotion() {
     }
   }
 
+  // Google Calendar — ปุ่ม Add to Calendar (คลิกเดียว ไม่ต้องมี API key)
+  if (currentResult.end_date) {
+    const calUrl = makeCalendarUrl(currentResult);
+    const el = document.createElement('div');
+    el.className = 'notion-status saved';
+    el.innerHTML = `📅 <a href="${calUrl}" target="_blank" rel="noopener" style="color:var(--green);font-weight:600;text-decoration:underline;cursor:pointer;">+ เพิ่มใน Google Calendar</a> — คลิกเพื่อตั้ง reminder วันหมดสัญญา`;
+    statuses.appendChild(el);
+  }
+
   addToHistory(currentResult, 'saved');
   renderHistory();
   btn.textContent = '✅ บันทึกเรียบร้อย';
   btn.style.background = 'linear-gradient(135deg, var(--green), #059669)';
+}
+
+function makeCalendarUrl(r) {
+  const d = (r.end_date || '').replace(/-/g, '');
+  const title   = encodeURIComponent(`🔔 สัญญาหมด: ${r.tenant_name || '?'} — ${r.property || '?'}`);
+  const details = encodeURIComponent([
+    `ผู้เช่า: ${r.tenant_name || '—'}`,
+    `ห้อง: ${r.property || '—'}`,
+    `ค่าเช่า: ฿${(r.rent || 0).toLocaleString()}/เดือน`,
+    `เงินมัดจำ: ฿${(r.deposit || 0).toLocaleString()}`,
+    r.tenant_phone ? `โทร: ${r.tenant_phone}` : '',
+  ].filter(Boolean).join('\n'));
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${d}/${d}&details=${details}`;
 }
 
 async function uploadFile(file) {
