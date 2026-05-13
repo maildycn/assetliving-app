@@ -368,6 +368,45 @@
   }
   .empty-icon { font-size: 32px; margin-bottom: 8px; }
 
+  /* Contracts view */
+  .contracts-toolbar {
+    display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;
+  }
+  .contracts-search {
+    flex: 1; min-width: 140px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: Sarabun, sans-serif; font-size: 13px;
+    padding: 8px 12px; outline: none;
+  }
+  .contracts-search:focus { border-color: var(--accent); }
+  .contracts-search::placeholder { color: var(--text3); }
+  .contracts-filter {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text2);
+    font-family: Sarabun, sans-serif; font-size: 12px;
+    padding: 8px 10px; outline: none; cursor: pointer;
+  }
+  .contract-row {
+    padding: 11px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface2);
+    margin-bottom: 6px; font-size: 13px; cursor: default;
+  }
+  .contract-row:hover { border-color: var(--border2); }
+  .contract-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+  .contract-tenant { font-weight: 600; color: var(--text); flex: 1; }
+  .contract-status {
+    font-size: 10px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+  }
+  .status-active { background: rgba(16,185,129,0.12); color: var(--green); }
+  .status-expiring { background: rgba(245,158,11,0.12); color: var(--amber); }
+  .status-expired { background: rgba(239,68,68,0.1); color: var(--red); }
+  .contract-meta { font-size: 11px; color: var(--text3); display: flex; gap: 10px; flex-wrap: wrap; }
+  .contract-meta span { white-space: nowrap; }
+  .contracts-count { font-size: 12px; color: var(--text3); padding: 0 4px; white-space: nowrap; }
+  .btn-reload { background: var(--surface3); border: 1px solid var(--border2); color: var(--text2); border-radius: var(--radius-sm); padding: 7px 12px; font-size: 12px; cursor: pointer; font-family: Sarabun, sans-serif; }
+  .btn-reload:hover { border-color: var(--accent); color: var(--accent2); }
+
   /* Asset room picker */
   .asset-picker {
     margin-top: 8px;
@@ -440,7 +479,8 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('upload', this)">📤 อัปโหลดสัญญา</button>
-    <button class="tab-btn" onclick="requestHistory(this)">🔒 ประวัติ</button>
+    <button class="tab-btn" onclick="requestProtected('contracts', this)">🔒 สัญญาเช่าทั้งหมด</button>
+    <button class="tab-btn" onclick="requestProtected('history', this)">🔒 ประวัติ</button>
   </div>
 
   <!-- Password Modal -->
@@ -573,6 +613,29 @@
 
   </div>
 
+  <!-- Contracts Tab (password-protected) -->
+  <div class="tab-panel" id="tab-contracts">
+    <div class="upload-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h3 style="margin:0;">📋 สัญญาเช่าทั้งหมด</h3>
+        <button class="btn-reload" onclick="loadContracts()">↺ โหลดใหม่</button>
+      </div>
+      <div class="contracts-toolbar">
+        <input class="contracts-search" id="contracts-search" placeholder="🔍 ค้นหาชื่อผู้เช่า, ห้อง..." oninput="filterContracts()">
+        <select class="contracts-filter" id="contracts-status-filter" onchange="filterContracts()">
+          <option value="">ทุกสถานะ</option>
+          <option value="active">ใช้งานอยู่</option>
+          <option value="expiring">ใกล้หมด (≤30 วัน)</option>
+          <option value="expired">หมดอายุ</option>
+        </select>
+        <span class="contracts-count" id="contracts-count"></span>
+      </div>
+      <div id="contracts-list">
+        <div class="empty-state"><div class="empty-icon">📋</div><div>กดโหลดเพื่อดูสัญญาเช่าทั้งหมด</div></div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-panel" id="tab-history">
     <div class="upload-card">
       <h3>📋 ประวัติสัญญาที่อ่านแล้ว</h3>
@@ -603,13 +666,16 @@ let history = JSON.parse(localStorage.getItem('lease_history') || '[]');
 // ---- Init ----
 // ---- Password ----
 const HISTORY_PASSWORD = 'assetliving2026';
-let historyUnlocked = false;
-let historyTabEl = null;
+let _protectedUnlocked = false;
+let _pendingTab = null;
+let _pendingTabEl = null;
 
-function requestHistory(el) {
-  historyTabEl = el;
-  if (historyUnlocked) {
-    switchTab('history', el);
+function requestProtected(tabName, el) {
+  _pendingTab = tabName;
+  _pendingTabEl = el;
+  if (_protectedUnlocked) {
+    switchTab(tabName, el);
+    if (tabName === 'contracts' && _allContracts.length === 0) loadContracts();
     return;
   }
   document.getElementById('pw-modal').style.display = 'flex';
@@ -618,12 +684,17 @@ function requestHistory(el) {
   setTimeout(() => document.getElementById('pw-input').focus(), 100);
 }
 
+function requestHistory(el) { requestProtected('history', el); }
+
 function checkPw() {
   const val = document.getElementById('pw-input').value;
   if (val === HISTORY_PASSWORD) {
-    historyUnlocked = true;
+    _protectedUnlocked = true;
     closePwModal();
-    if (historyTabEl) switchTab('history', historyTabEl);
+    if (_pendingTabEl) {
+      switchTab(_pendingTab, _pendingTabEl);
+      if (_pendingTab === 'contracts' && _allContracts.length === 0) loadContracts();
+    }
   } else {
     document.getElementById('pw-error').style.display = 'block';
     document.getElementById('pw-input').value = '';
@@ -1332,6 +1403,96 @@ function renderHistory() {
       </div>
     `;
   }).join('');
+}
+
+// ---- Contracts from Notion ----
+let _allContracts = [];
+
+async function loadContracts() {
+  const list = document.getElementById('contracts-list');
+  const count = document.getElementById('contracts-count');
+  list.innerHTML = '<div class="empty-state"><div class="spinner-sm" style="margin:0 auto 8px;display:block;"></div><div>กำลังโหลดจาก Notion...</div></div>';
+  count.textContent = '';
+  try {
+    let pages = [], cursor;
+    do {
+      const body = { page_size: 100, sorts: [{ property: 'วันหมดสัญญา', direction: 'descending' }] };
+      if (cursor) body.start_cursor = cursor;
+      const res = await fetch('/api/notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'POST', path: `databases/${BUILTIN_CONFIG.leaseDb}/query`, data: body })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Notion error');
+      pages = pages.concat(data.results || []);
+      cursor = data.has_more ? data.next_cursor : null;
+    } while (cursor);
+
+    _allContracts = pages.map(p => ({
+      tenant:   getPageTitleText(p) || '—',
+      property: p.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '—',
+      rent:     p.properties['ค่าเช่า (บาท/เดือน)']?.number ?? null,
+      deposit:  p.properties['เงินมัดจำ (บาท)']?.number ?? null,
+      start:    p.properties['วันเริ่มสัญญา']?.date?.start || null,
+      end:      p.properties['วันหมดสัญญา']?.date?.start || null,
+      phone:    p.properties['เบอร์โทรผู้เช่า']?.phone_number || null,
+      status:   p.properties['สถานะสัญญา']?.select?.name || null,
+    }));
+    filterContracts();
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>โหลดไม่สำเร็จ: ${e.message}</div></div>`;
+  }
+}
+
+function _contractStatusKey(c) {
+  if (!c.end) return 'active';
+  const d = Math.ceil((new Date(c.end) - new Date()) / 864e5);
+  return d < 0 ? 'expired' : d <= 30 ? 'expiring' : 'active';
+}
+function _contractStatusLabel(c) {
+  if (!c.end) return 'ใช้งานอยู่';
+  const d = Math.ceil((new Date(c.end) - new Date()) / 864e5);
+  if (d < 0) return `หมดแล้ว ${Math.abs(d)} วัน`;
+  if (d <= 30) return `หมดใน ${d} วัน`;
+  return 'ใช้งานอยู่';
+}
+function _contractStatusClass(c) {
+  return { active: 'status-active', expiring: 'status-expiring', expired: 'status-expired' }[_contractStatusKey(c)];
+}
+
+function filterContracts() {
+  const q  = (document.getElementById('contracts-search')?.value || '').trim().toLowerCase();
+  const sf = document.getElementById('contracts-status-filter')?.value || '';
+  const list  = document.getElementById('contracts-list');
+  const count = document.getElementById('contracts-count');
+
+  const rows = _allContracts.filter(c => {
+    if (q && !c.tenant.toLowerCase().includes(q) && !c.property.toLowerCase().includes(q) && !(c.phone||'').includes(q)) return false;
+    if (sf && _contractStatusKey(c) !== sf) return false;
+    return true;
+  });
+
+  count.textContent = rows.length ? `${rows.length} รายการ` : '';
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div>ไม่พบสัญญาที่ตรงกัน</div></div>';
+    return;
+  }
+  list.innerHTML = rows.map(c => `
+    <div class="contract-row">
+      <div class="contract-top">
+        <span class="contract-tenant">${c.tenant}</span>
+        <span class="contract-status ${_contractStatusClass(c)}">${_contractStatusLabel(c)}</span>
+      </div>
+      <div class="contract-meta">
+        <span>🏠 ${c.property}</span>
+        ${c.rent    ? `<span>💰 ฿${c.rent.toLocaleString()}/เดือน</span>` : ''}
+        ${c.deposit ? `<span>🔒 มัดจำ ฿${c.deposit.toLocaleString()}</span>` : ''}
+        ${c.phone   ? `<span>📞 ${c.phone}</span>` : ''}
+        ${c.start   ? `<span>📅 ${c.start} → ${c.end||'ไม่ระบุ'}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
 }
 
 function resetForm() {
