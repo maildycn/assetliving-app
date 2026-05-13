@@ -367,6 +367,63 @@
     font-size: 13px;
   }
   .empty-icon { font-size: 32px; margin-bottom: 8px; }
+
+  /* Asset room picker */
+  .asset-picker {
+    margin-top: 8px;
+    background: rgba(99,102,241,0.06);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+  .asset-picker-label {
+    font-size: 12px;
+    color: var(--accent2);
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: 0.04em;
+  }
+  .asset-room-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 13px;
+  }
+  .asset-room-card:hover { border-color: var(--accent); background: rgba(99,102,241,0.08); }
+  .asset-room-card.selected { border-color: var(--accent); background: rgba(99,102,241,0.15); }
+  .asset-room-card input[type=radio] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; }
+  .asset-room-name { font-weight: 600; color: var(--text); flex: 1; }
+  .asset-room-meta { font-size: 11px; color: var(--text3); }
+  .asset-score-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: rgba(99,102,241,0.15);
+    color: var(--accent2);
+    flex-shrink: 0;
+  }
+  .asset-picker-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .asset-picker-actions button {
+    padding: 7px 16px;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    font-family: Sarabun, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  .asset-picker-actions button:hover { opacity: 0.85; }
+  .btn-asset-confirm { background: var(--accent); color: #fff; }
+  .btn-asset-confirm:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-asset-skip { background: var(--surface3); color: var(--text2); }
 </style>
 </head>
 <body>
@@ -745,7 +802,12 @@ async function saveBatch(results) {
     }
     try {
       await saveLeaseAI(r, BUILTIN_CONFIG.leaseDb);
-      if (r.property) await withTimeout(updateAssetLiving(r, BUILTIN_CONFIG.assetDb), 10000).catch(() => {});
+      if (r.property) {
+        try {
+          const cands = await withTimeout(fetchAssetCandidates(r, BUILTIN_CONFIG.assetDb), 10000);
+          if (cands.length && cands[0].score >= 80) await patchAssetPage(cands[0].page.id, r);
+        } catch {}
+      }
       saved++;
       addToHistory(r, 'saved');
     } catch(e) {
@@ -970,12 +1032,27 @@ async function saveToNotion() {
   }
 
   if (currentResult.property) {
-    addNotionStatus(statuses, 'saving', '🏠 กำลังอัปเดต AssetLiving...');
+    addNotionStatus(statuses, 'saving', '🏠 กำลังค้นหาห้องใน AssetLiving...');
     try {
-      const res = await withTimeout(updateAssetLiving(currentResult, BUILTIN_CONFIG.assetDb), 10000);
-      addNotionStatus(statuses, res.ok ? 'saved' : 'error',
-        res.ok ? `✅ อัปเดต AssetLiving สำเร็จ — ${res.debug}`
-               : `⚠️ AssetLiving: ${res.debug}`);
+      const candidates = await withTimeout(fetchAssetCandidates(currentResult, BUILTIN_CONFIG.assetDb), 12000);
+      // ลบ spinner ออกก่อนแสดง picker
+      statuses.lastChild?.remove();
+
+      if (!candidates.length) {
+        addNotionStatus(statuses, 'error', `⚠️ ไม่พบห้องที่ใกล้เคียง "${currentResult.property}" ใน AssetLiving`);
+      } else {
+        const { chosen } = await showAssetPicker(candidates, currentResult, statuses);
+        if (chosen) {
+          addNotionStatus(statuses, 'saving', `🔄 กำลังอัปเดต "${chosen.name}"...`);
+          const ok = await patchAssetPage(chosen.page.id, currentResult);
+          statuses.lastChild?.remove();
+          addNotionStatus(statuses, ok ? 'saved' : 'error',
+            ok ? `✅ อัปเดต AssetLiving — "${chosen.name}" เรียบร้อยแล้ว`
+               : `❌ อัปเดต "${chosen.name}" ไม่สำเร็จ`);
+        } else {
+          addNotionStatus(statuses, 'error', '⏭ ข้ามการอัปเดต AssetLiving');
+        }
+      }
     } catch(e) {
       const msg = e.message === 'timeout' ? 'หมดเวลา — ข้ามการอัปเดต AssetLiving' : e.message;
       addNotionStatus(statuses, 'error', `⚠️ ${msg}`);
@@ -1091,40 +1168,78 @@ function withTimeout(promise, ms) {
   ]);
 }
 
-async function updateAssetLiving(r, dbId) {
-  const pages = await fetchAllAssetPages(dbId);
-  if (!pages.length) return { ok: false, debug: 'AssetLiving database ว่างเปล่า หรือ ID ไม่ถูกต้อง' };
-
-  let best = null, bestScore = 0;
-  for (const p of pages) {
-    // ค้นหาในทุก property ที่เป็น text/title/rich_text
-    const candidates = [];
-    for (const val of Object.values(p.properties || {})) {
-      if (val.type === 'title' && val.title?.length) candidates.push(val.title[0].plain_text);
-      if (val.type === 'rich_text' && val.rich_text?.length) candidates.push(val.rich_text[0].plain_text);
+function getAssetPageMeta(p) {
+  let rent = null;
+  for (const [, val] of Object.entries(p.properties || {})) {
+    if (val.type === 'number' && val.number != null && val.number > 0) {
+      if (!rent || val.number < rent) rent = val.number; // เลือกตัวเล็กสุด (ค่าเช่า)
     }
-    const score = Math.max(...candidates.map(c => roomMatchScore(c, r.property)), 0);
-    if (score > bestScore) { bestScore = score; best = p; }
   }
+  return { name: getPageTitleText(p) || '(ไม่มีชื่อ)', rent };
+}
 
-  const sample = pages.slice(0, 3).map(p => getPageTitleText(p) || '(ไม่มีชื่อ)').join(', ');
+async function fetchAssetCandidates(r, dbId) {
+  const pages = await fetchAllAssetPages(dbId);
+  if (!pages.length) return [];
 
-  if (!best || bestScore < 40) {
-    return { ok: false, debug: `ไม่พบห้อง "${r.property}" (คะแนนสูงสุด ${bestScore}) — ตัวอย่างห้องใน AssetLiving: ${sample}` };
-  }
+  const scored = pages.map(p => {
+    const textValues = [];
+    for (const val of Object.values(p.properties || {})) {
+      if (val.type === 'title' && val.title?.length) textValues.push(val.title[0].plain_text);
+      if (val.type === 'rich_text' && val.rich_text?.length) textValues.push(val.rich_text[0].plain_text);
+    }
+    const score = textValues.length ? Math.max(...textValues.map(c => roomMatchScore(c, r.property))) : 0;
+    return { page: p, score, ...getAssetPageMeta(p) };
+  });
 
+  return scored.sort((a, b) => b.score - a.score).slice(0, 3).filter(c => c.score > 0);
+}
+
+async function patchAssetPage(pageId, r) {
   const updateProps = {};
   if (r.end_date) updateProps['วันที่สิ้นสุดสัญญา'] = { date: { start: r.end_date } };
-
-  if (!Object.keys(updateProps).length) return { ok: false, debug: 'ไม่มีข้อมูลให้อัปเดต (end_date ไม่มี)' };
-
-  const uRes = await fetch('/api/notion', {
+  if (!Object.keys(updateProps).length) return false;
+  const res = await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'PATCH', path: `pages/${best.id}`, data: { properties: updateProps } })
+    body: JSON.stringify({ method: 'PATCH', path: `pages/${pageId}`, data: { properties: updateProps } })
   });
-  const bestName = getPageTitleText(best) || best.id;
-  return { ok: uRes.ok, debug: uRes.ok ? `จับคู่กับ "${bestName}" (score ${bestScore})` : `PATCH failed ${uRes.status}` };
+  return res.ok;
+}
+
+function showAssetPicker(candidates, r, container) {
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.className = 'asset-picker';
+    wrap.innerHTML = `
+      <div class="asset-picker-label">🏠 เลือกห้องที่ต้องการอัปเดตใน AssetLiving</div>
+      ${candidates.map((c, i) => `
+        <label class="asset-room-card" id="arc-${i}" onclick="document.querySelectorAll('.asset-room-card').forEach(el=>el.classList.remove('selected'));this.classList.add('selected');document.getElementById('arc-radio-${i}').checked=true;document.getElementById('btn-asset-confirm').disabled=false;">
+          <input type="radio" name="asset-pick" id="arc-radio-${i}" value="${i}" style="pointer-events:none;">
+          <span class="asset-room-name">${c.name}</span>
+          ${c.rent ? `<span class="asset-room-meta">฿${c.rent.toLocaleString()}/เดือน</span>` : ''}
+          <span class="asset-score-badge">${c.score}%</span>
+        </label>
+      `).join('')}
+      <div class="asset-picker-actions">
+        <button class="btn-asset-confirm" id="btn-asset-confirm" disabled>ยืนยัน</button>
+        <button class="btn-asset-skip" id="btn-asset-skip">ข้าม</button>
+      </div>
+    `;
+    container.appendChild(wrap);
+
+    document.getElementById('btn-asset-confirm').onclick = async () => {
+      const checked = wrap.querySelector('input[name="asset-pick"]:checked');
+      if (!checked) return;
+      const chosen = candidates[+checked.value];
+      wrap.remove();
+      resolve({ chosen });
+    };
+    document.getElementById('btn-asset-skip').onclick = () => {
+      wrap.remove();
+      resolve({ chosen: null });
+    };
+  });
 }
 
 // ---- Helpers ----
