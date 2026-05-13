@@ -368,53 +368,6 @@
   }
   .empty-icon { font-size: 32px; margin-bottom: 8px; }
 
-  /* Contracts view */
-  .contracts-toolbar {
-    display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;
-  }
-  .contracts-search {
-    flex: 1; min-width: 140px;
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: var(--radius-sm); color: var(--text);
-    font-family: Sarabun, sans-serif; font-size: 13px;
-    padding: 8px 12px; outline: none;
-  }
-  .contracts-search:focus { border-color: var(--accent); }
-  .contracts-search::placeholder { color: var(--text3); }
-  .contracts-filter {
-    background: var(--surface2); border: 1px solid var(--border2);
-    border-radius: var(--radius-sm); color: var(--text2);
-    font-family: Sarabun, sans-serif; font-size: 12px;
-    padding: 8px 10px; outline: none; cursor: pointer;
-  }
-  .contract-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto auto;
-    gap: 8px 12px;
-    align-items: center;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface2);
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
-  .contract-row:hover { border-color: var(--border2); }
-  .contract-tenant { font-weight: 600; color: var(--text); }
-  .contract-room { color: var(--text2); font-size: 12px; }
-  .contract-rent { color: var(--green); font-size: 12px; font-weight: 500; white-space: nowrap; }
-  .contract-dates { color: var(--text3); font-size: 11px; text-align: right; }
-  .contract-status {
-    font-size: 10px; padding: 2px 8px; border-radius: 20px; white-space: nowrap;
-    grid-column: 3; justify-self: end;
-  }
-  .status-active { background: rgba(16,185,129,0.12); color: var(--green); }
-  .status-expiring { background: rgba(245,158,11,0.12); color: var(--amber); }
-  .status-expired { background: rgba(239,68,68,0.1); color: var(--red); }
-  .contracts-count { font-size: 12px; color: var(--text3); padding: 0 4px; white-space: nowrap; }
-  .btn-reload { background: var(--surface3); border: 1px solid var(--border2); color: var(--text2); border-radius: var(--radius-sm); padding: 7px 12px; font-size: 12px; cursor: pointer; font-family: Sarabun, sans-serif; }
-  .btn-reload:hover { border-color: var(--accent); color: var(--accent2); }
-
   /* Asset room picker */
   .asset-picker {
     margin-top: 8px;
@@ -487,7 +440,6 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('upload', this)">📤 อัปโหลดสัญญา</button>
-    <button class="tab-btn" onclick="switchTab('contracts', this)">📋 สัญญาเช่าทั้งหมด</button>
     <button class="tab-btn" onclick="requestHistory(this)">🔒 ประวัติ</button>
   </div>
 
@@ -621,30 +573,6 @@
 
   </div>
 
-  <!-- HISTORY TAB -->
-  <!-- Contracts Tab -->
-  <div class="tab-panel" id="tab-contracts">
-    <div class="upload-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h3 style="margin:0;">📋 สัญญาเช่าทั้งหมด</h3>
-        <button class="btn-reload" onclick="loadContracts()">↺ โหลดใหม่</button>
-      </div>
-      <div class="contracts-toolbar">
-        <input class="contracts-search" id="contracts-search" placeholder="🔍 ค้นหาชื่อผู้เช่า, ห้อง..." oninput="filterContracts()">
-        <select class="contracts-filter" id="contracts-status-filter" onchange="filterContracts()">
-          <option value="">ทุกสถานะ</option>
-          <option value="active">ใช้งานอยู่</option>
-          <option value="expiring">ใกล้หมด (≤30 วัน)</option>
-          <option value="expired">หมดอายุ</option>
-        </select>
-        <span class="contracts-count" id="contracts-count"></span>
-      </div>
-      <div id="contracts-list">
-        <div class="empty-state"><div class="empty-icon">📄</div><div>กดโหลดเพื่อดูสัญญาเช่าทั้งหมด</div></div>
-      </div>
-    </div>
-  </div>
-
   <div class="tab-panel" id="tab-history">
     <div class="upload-card">
       <h3>📋 ประวัติสัญญาที่อ่านแล้ว</h3>
@@ -717,7 +645,6 @@ function switchTab(name, el) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'contracts' && _allContracts.length === 0) loadContracts();
 }
 
 // ---- File Handling ----
@@ -1402,102 +1329,6 @@ function renderHistory() {
           <div class="history-meta">${h.property||'?'} · ฿${(h.rent||0).toLocaleString()} · ${h.end_date||'ไม่ระบุวันหมด'}</div>
         </div>
         <span class="history-badge ${badgeClass}">${badgeText}</span>
-      </div>
-    `;
-  }).join('');
-}
-
-// ---- Contracts from Notion ----
-let _allContracts = [];
-
-async function loadContracts() {
-  const list = document.getElementById('contracts-list');
-  const count = document.getElementById('contracts-count');
-  list.innerHTML = '<div class="empty-state"><div class="spinner-sm" style="margin:0 auto 8px;"></div><div>กำลังโหลดจาก Notion...</div></div>';
-  count.textContent = '';
-  try {
-    let pages = [], cursor;
-    do {
-      const body = { page_size: 100, sorts: [{ property: 'วันหมดสัญญา', direction: 'descending' }] };
-      if (cursor) body.start_cursor = cursor;
-      const res = await fetch('/api/notion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'POST', path: `databases/${BUILTIN_CONFIG.leaseDb}/query`, data: body })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Notion error');
-      pages = pages.concat(data.results || []);
-      cursor = data.has_more ? data.next_cursor : null;
-    } while (cursor);
-
-    _allContracts = pages.map(p => ({
-      id: p.id,
-      tenant: getPageTitleText(p) || '—',
-      property: p.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '—',
-      rent: p.properties['ค่าเช่า (บาท/เดือน)']?.number || null,
-      start: p.properties['วันเริ่มสัญญา']?.date?.start || null,
-      end: p.properties['วันหมดสัญญา']?.date?.start || null,
-      status: p.properties['สถานะสัญญา']?.select?.name || '—',
-    }));
-
-    filterContracts();
-  } catch(e) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>โหลดไม่สำเร็จ: ${e.message}</div></div>`;
-  }
-}
-
-function getContractStatusClass(c) {
-  if (!c.end) return 'status-active';
-  const days = Math.ceil((new Date(c.end) - new Date()) / 864e5);
-  if (days < 0) return 'status-expired';
-  if (days <= 30) return 'status-expiring';
-  return 'status-active';
-}
-function getContractStatusLabel(c) {
-  if (!c.end) return 'ใช้งานอยู่';
-  const days = Math.ceil((new Date(c.end) - new Date()) / 864e5);
-  if (days < 0) return `หมดแล้ว ${Math.abs(days)} วัน`;
-  if (days <= 30) return `หมดใน ${days} วัน`;
-  return 'ใช้งานอยู่';
-}
-
-function filterContracts() {
-  const q = (document.getElementById('contracts-search')?.value || '').trim().toLowerCase();
-  const sf = document.getElementById('contracts-status-filter')?.value || '';
-  const list = document.getElementById('contracts-list');
-  const count = document.getElementById('contracts-count');
-
-  let rows = _allContracts.filter(c => {
-    if (q && !c.tenant.toLowerCase().includes(q) && !c.property.toLowerCase().includes(q)) return false;
-    if (sf) {
-      const sc = getContractStatusClass(c).replace('status-', '');
-      if (sc !== sf) return false;
-    }
-    return true;
-  });
-
-  count.textContent = rows.length ? `${rows.length} รายการ` : '';
-
-  if (!rows.length) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><div>ไม่พบสัญญาที่ตรงกัน</div></div>';
-    return;
-  }
-
-  list.innerHTML = rows.map(c => {
-    const sc = getContractStatusClass(c);
-    const sl = getContractStatusLabel(c);
-    return `
-      <div class="contract-row">
-        <div>
-          <div class="contract-tenant">${c.tenant}</div>
-          <div class="contract-room">${c.property}</div>
-        </div>
-        <div>
-          ${c.rent ? `<div class="contract-rent">฿${c.rent.toLocaleString()}/เดือน</div>` : ''}
-          <div class="contract-dates">${c.start||'?'} → ${c.end||'ไม่ระบุ'}</div>
-        </div>
-        <span class="contract-status ${sc}">${sl}</span>
       </div>
     `;
   }).join('');
