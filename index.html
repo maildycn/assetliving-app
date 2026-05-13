@@ -745,7 +745,7 @@ async function saveBatch(results) {
     }
     try {
       await saveLeaseAI(r, BUILTIN_CONFIG.leaseDb);
-      if (r.property && r.end_date) await updateAssetLiving(r, BUILTIN_CONFIG.assetDb);
+      if (r.property && r.end_date) await withTimeout(updateAssetLiving(r, BUILTIN_CONFIG.assetDb), 10000).catch(() => {});
       saved++;
       addToHistory(r, 'saved');
     } catch(e) {
@@ -832,20 +832,36 @@ function isExpired(r) {
 async function checkDuplicate(r, dbId) {
   if (!r.tenant_name && !r.property) return false;
   try {
-    const filters = [];
-    if (r.tenant_name) filters.push({ property: 'ชื่อผู้เช่า', title: { equals: r.tenant_name } });
-    if (r.property)    filters.push({ property: 'ทรัพย์สิน / ห้อง', rich_text: { equals: r.property } });
+    // ดึงสัญญาทั้งหมดของผู้เช่าคนนี้ก่อน (filter ชื่อผู้เช่า)
+    const filterBody = r.tenant_name
+      ? { filter: { property: 'ชื่อผู้เช่า', title: { equals: r.tenant_name } }, page_size: 50 }
+      : { page_size: 100 };
+
     const res = await fetch('/api/notion', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        method: 'POST',
-        path: `databases/${dbId}/query`,
-        data: { filter: filters.length === 2 ? { and: filters } : filters[0], page_size: 1 }
-      })
+      body: JSON.stringify({ method: 'POST', path: `databases/${dbId}/query`, data: filterBody })
     });
     const data = await res.json();
-    return (data.results || []).length > 0;
+    const records = data.results || [];
+    if (!records.length) return false;
+
+    // ตรวจสอบซ้ำโดยเปรียบห้อง + วันที่
+    for (const rec of records) {
+      const recProperty  = rec.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '';
+      const recStartDate = rec.properties['วันเริ่มสัญญา']?.date?.start || '';
+      const recEndDate   = rec.properties['วันหมดสัญญา']?.date?.start   || '';
+
+      // ถ้า start_date ตรงกัน = สัญญาเดียวกันแน่นอน
+      if (r.start_date && recStartDate && r.start_date === recStartDate) return true;
+
+      // ถ้าชื่อห้อง fuzzy match คะแนน >= 70 ถือว่าห้องเดียวกัน
+      if (r.property && recProperty && roomMatchScore(recProperty, r.property) >= 70) {
+        // ถ้าไม่มีวันที่ หรือ end_date ตรงกัน = ซ้ำ
+        if (!r.start_date || !recStartDate) return true;
+      }
+    }
+    return false;
   } catch { return false; }
 }
 
@@ -941,12 +957,13 @@ async function saveToNotion() {
   if (currentResult.property && currentResult.end_date) {
     addNotionStatus(statuses, 'saving', '🏠 กำลังอัปเดต AssetLiving...');
     try {
-      const updated = await updateAssetLiving(currentResult, BUILTIN_CONFIG.assetDb);
+      const updated = await withTimeout(updateAssetLiving(currentResult, BUILTIN_CONFIG.assetDb), 10000);
       addNotionStatus(statuses, updated ? 'saved' : 'error',
         updated ? `✅ อัปเดต AssetLiving — ${currentResult.property} เรียบร้อยแล้ว`
                 : `⚠️ ไม่พบห้อง "${currentResult.property}" ใน AssetLiving`);
     } catch(e) {
-      addNotionStatus(statuses, 'error', '❌ อัปเดต AssetLiving ไม่สำเร็จ: ' + e.message);
+      const msg = e.message === 'timeout' ? 'หมดเวลา — ข้ามการอัปเดต AssetLiving' : e.message;
+      addNotionStatus(statuses, 'error', `⚠️ ${msg}`);
     }
   }
 
@@ -1039,9 +1056,16 @@ async function fetchAllAssetPages(dbId) {
     });
     const data = await res.json();
     pages = pages.concat(data.results || []);
-    cursor = data.has_more ? data.next_cursor : null;
+    cursor = (data.has_more && pages.length < 200) ? data.next_cursor : null;
   } while (cursor);
   return pages;
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+  ]);
 }
 
 async function updateAssetLiving(r, dbId) {
