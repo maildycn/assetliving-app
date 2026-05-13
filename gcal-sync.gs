@@ -167,8 +167,18 @@ function setup() {
   );
   const data = JSON.parse(res.getContentText());
   if (data.id) {
-    Logger.log('✅ Setup สำเร็จ — สร้าง property "' + EVENT_ID_PROP + '" ใน Notion แล้ว');
+    Logger.log('Setup OK');
   } else {
-    Logger.log('❌ Setup ล้มเหลว: ' + res.getContentText());
+    Logger.log('Setup failed: ' + res.getContentText());
   }
+}
+
+// ── ทดสอบสิทธิ์ Calendar (รันครั้งเดียวก่อน syncCalendar) ────────────────────
+function authCalendar() {
+  const cal = CalendarApp.getDefaultCalendar();
+  const d = new Date();
+  d.setDate(d.getDate() + 365);
+  const ev = cal.createAllDayEvent('AssetLiving Test', d);
+  ev.deleteEvent();
+  Logger.log('Calendar write OK');
 }
