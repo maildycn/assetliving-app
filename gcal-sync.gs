@@ -39,30 +39,27 @@ function syncCalendar() {
       // สัญญายังใช้งาน + ยังไม่มี event → สร้างใหม่
       try {
         const endDate = new Date(c.endDate);
-        const title   = `🔔 สัญญาหมด: ${c.tenant} — ${c.property}`;
-        const desc    = [
-          `ผู้เช่า: ${c.tenant}`,
-          `ห้อง: ${c.property}`,
-          c.rent  ? `ค่าเช่า: ฿${c.rent.toLocaleString()}/เดือน` : null,
-          c.deposit ? `เงินมัดจำ: ฿${c.deposit.toLocaleString()}` : null,
-          c.phone ? `โทร: ${c.phone}` : null,
-          `วันเริ่ม: ${c.startDate || '—'}`,
+        const title = 'สัญญาหมด: ' + c.tenant + ' - ' + c.property;
+        const desc  = [
+          'ผู้เช่า: ' + c.tenant,
+          'ห้อง: ' + c.property,
+          c.rent    ? 'ค่าเช่า: ' + c.rent + '/เดือน' : null,
+          c.deposit ? 'เงินมัดจำ: ' + c.deposit        : null,
+          c.phone   ? 'โทร: ' + c.phone                : null,
+          'วันเริ่ม: ' + (c.startDate || '-'),
         ].filter(Boolean).join('\n');
 
         const ev = cal.createAllDayEvent(title, endDate, { description: desc });
+        Logger.log('Event created: ' + c.tenant);
 
-        // Reminder: 28 วันก่อน (max ที่ Google รองรับ ≈ 1 เดือน), 1 วันก่อน, วันหมด
-        ev.addPopupReminder(40320); // 28 วัน
-        ev.addPopupReminder(1440);  // 1 วัน
-        ev.addPopupReminder(480);   // 8 ชม. (เช้าวันหมด)
-        ev.addEmailReminder(40320); // email 28 วัน
-        ev.addEmailReminder(1440);  // email 1 วัน
+        try { ev.addPopupReminder(40320); } catch(e2) { Logger.log('reminder 40320 failed: ' + e2); }
+        try { ev.addPopupReminder(1440);  } catch(e2) { Logger.log('reminder 1440 failed: ' + e2); }
+        try { ev.addPopupReminder(480);   } catch(e2) { Logger.log('reminder 480 failed: ' + e2); }
 
         notionPatchEventId(c.pageId, ev.getId());
         created++;
-        Logger.log(`Created: ${c.tenant} (${c.endDate})`);
       } catch (e) {
-        Logger.log(`Create failed [${c.tenant}]: ${e}`);
+        Logger.log('Create failed [' + c.tenant + ']: ' + e);
       }
     }
   }
