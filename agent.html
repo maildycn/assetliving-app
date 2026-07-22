@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetLiving — รายการห้องเช่า</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080808;--s1:#111;--s2:#181818;--border:rgba(201,168,76,.15);--border2:rgba(201,168,76,.35);--gold:#C9A84C;--gold2:#E5C56B;--white:#F5F5F0;--gray:#888880;--gray2:#555550;--green:#4CAF7A;--red:#E05555;--r:12px;--fh:'Cormorant Garamond',serif;--fb:'Sarabun',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:var(--fb);min-height:100vh}
+header{padding:36px 24px 24px;text-align:center;border-bottom:1px solid var(--border)}
+.h-title{font-family:var(--fh);font-size:32px;color:var(--gold);letter-spacing:.5px;font-weight:600}
+.h-sub{font-size:12px;color:var(--gray);letter-spacing:2px;text-transform:uppercase;margin-top:6px}
+.toolbar{max-width:1200px;margin:20px auto 0;padding:0 24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.toolbar input{flex:1;min-width:180px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--white);font-family:var(--fb);font-size:13px;outline:none}
+.toolbar input:focus{border-color:var(--gold)}
+.chip{padding:8px 16px;border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border2);color:var(--gray);background:transparent;transition:all .15s}
+.chip.active{background:var(--gold);color:#000;border-color:var(--gold);font-weight:600}
+.grid{max-width:1200px;margin:24px auto;padding:0 24px 60px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .15s}
+.card:hover{border-color:var(--border2)}
+.card-img{width:100%;height:170px;background:var(--s2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--gray2);font-size:12px}
+.card-img-link{color:var(--gold2);text-decoration:none;font-size:13px;font-weight:500;transition:background .15s}
+.card-img-link:hover{background:#1c1c1c}
+.card-img-wrap{position:relative}
+.img-more{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.65);backdrop-filter:blur(2px);color:var(--gold2);text-decoration:none;font-size:11px;font-weight:500;padding:5px 10px;border-radius:99px;border:1px solid rgba(201,168,76,.3);transition:background .15s}
+.img-more:hover{background:rgba(0,0,0,.85)}
+.card-body{padding:16px}
+.card-name{font-family:var(--fh);font-size:19px;color:var(--white);font-weight:600;line-height:1.3;margin-bottom:8px}
+.card-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.card-rent{font-family:var(--fh);font-size:22px;color:var(--gold);font-weight:600}
+.card-rent-sub{font-size:11px;color:var(--gray)}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:500}
+.bg{background:rgba(76,175,122,.15);color:var(--green)}
+.br{background:rgba(224,85,85,.15);color:var(--red)}
+.card-note{margin-top:12px;font-size:12px}
+.card-note a{color:var(--gold2);text-decoration:none}
+.card-note a:hover{text-decoration:underline}
+.loading,.empty{text-align:center;color:var(--gray);padding:60px 20px;grid-column:1/-1}
+footer{text-align:center;padding:24px;font-size:11px;color:var(--gray2);border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<header>
+  <div class="h-title">AssetLiving</div>
+  <div class="h-sub">รายการห้องเช่า</div>
+</header>
+<div class="toolbar">
+  <input id="q" placeholder="ค้นหาชื่อห้อง...">
+  <button class="chip active" data-f="all" onclick="setFilter('all')">ทั้งหมด</button>
+  <button class="chip" data-f="ว่าง" onclick="setFilter('ว่าง')">ห้องว่าง</button>
+  <button class="chip" data-f="เต็ม" onclick="setFilter('เต็ม')">มีผู้เช่าแล้ว</button>
+</div>
+<div class="grid" id="grid"><div class="loading">⏳ กำลังโหลดข้อมูล...</div></div>
+<footer>© 2026 AssetLiving</footer>
+
+<script>
+const ASSET_DB = '2f4d4897dfba809596fedaf2fa3bf102';
+let ROOMS = [];
+let filter = 'all';
+
+const notion = async (path, data={}) => {
+  const r = await fetch('/api/notion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method:'POST',path,data})});
+  return r.json();
+};
+async function fetchAllRooms(){
+  let pages=[], cursor=null;
+  do{
+    const b={page_size:100}; if(cursor) b.start_cursor=cursor;
+    const r=await notion(`databases/${ASSET_DB}/query`,b);
+    pages=pages.concat(r.results||[]);
+    cursor=(r.has_more&&pages.length<500)?r.next_cursor:null;
+  }while(cursor);
+  return pages;
+}
+function isRealRoom(p){
+  // เว็บนี้ไว้ให้เอเจ้นต์ดูห้องที่ปล่อยเช่าได้ทั้งหมด รวมห้องที่ไม่ใช่ของเรา/ฝากขายด้วย
+  // (ช่อง "อื่นๆ" ใช้กันเฉพาะการคำนวณพอร์ตการเงินส่วนตัวใน finance.html เท่านั้น ไม่ใช้กรองที่นี่)
+  const runs=p.properties['ชื่อทรัพย์สิน']?.title||[];
+  if(!runs.length) return false;
+  const hasLink = runs.some(r=>r.href) || runs.some(r=>/https?:\/\//i.test(r.plain_text||''));
+  return !hasLink;
+}
+const fmt = n => '฿'+Number(n||0).toLocaleString('th-TH');
+// ไฟล์แนบใน Notion อาจเป็นรูปจริง (อัปโหลดตรง หรือลิงก์รูปตรงๆ) หรือลิงก์อัลบั้ม/โฟลเดอร์ (Google Drive/Photos, OneDrive) ซึ่งฝังเป็น <img> ไม่ได้ ต้องแยกสองแบบนี้
+function isDirectImageUrl(url, fileType){
+  if(fileType==='file') return true; // อัปโหลดตรงเข้า Notion เป็นไฟล์รูปเสมอ
+  return /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(url||'');
+}
+async function load(){
+  const pages = await fetchAllRooms();
+  ROOMS = pages.filter(isRealRoom).map(p=>{
+    const pr=p.properties;
+    const files = pr['รายละเอียด/รูปห้อง']?.files||[];
+    // รูปแรกที่เป็นไฟล์รูปจริง ใช้เป็นรูปปก · ไฟล์อื่นๆ ที่เหลือ (อัลบั้ม/รูปเพิ่มเติม) ใช้เป็นปุ่ม "ดูรูปเพิ่มเติม"
+    let photo=null, moreUrl=null;
+    for(const f of files){
+      const url = f?.file?.url || f?.external?.url;
+      if(!url) continue;
+      if(!photo && isDirectImageUrl(url, f.type)){ photo=url; continue; }
+      if(!moreUrl && url!==photo){ moreUrl=url; }
+    }
+    return{
+      name: pr['ชื่อทรัพย์สิน']?.title?.[0]?.plain_text||'—',
+      rent: pr['ค่าเช่ารายเดือน']?.number||0,
+      status: pr['สถานะการเช่า']?.status?.name||'—',
+      photo, albumUrl: moreUrl,
+      note: pr['หมายเหตุ']?.url || null,
+    };
+  }).sort((a,b)=>a.name.localeCompare(b.name,'th'));
+  render();
+}
+function setFilter(f){
+  filter=f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.f===f));
+  render();
+}
+function render(){
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const rows = ROOMS.filter(r=>{
+    if(filter!=='all' && r.status!==filter) return false;
+    if(q && !r.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  document.getElementById('grid').innerHTML = rows.map(r=>{
+    const bc = r.status==='ว่าง' ? 'bg' : r.status==='เต็ม' ? 'br' : '';
+    const moreBtn = r.photo && r.albumUrl ? `<a class="img-more" href="${r.albumUrl}" target="_blank" rel="noopener">📷 ดูรูปเพิ่มเติม</a>` : '';
+    const img = r.photo
+      ? `<div class="card-img-wrap"><div class="card-img" style="background-image:url('${r.photo}')"></div>${moreBtn}</div>`
+      : r.albumUrl
+        ? `<a class="card-img card-img-link" href="${r.albumUrl}" target="_blank" rel="noopener">📷 ดูอัลบั้มรูปภาพ</a>`
+        : `<div class="card-img">ไม่มีรูปภาพ</div>`;
+    const note = r.note ? `<div class="card-note"><a href="${r.note}" target="_blank" rel="noopener">🔗 ดูรายละเอียดเพิ่มเติม</a></div>` : '';
+    return `<div class="card">
+      ${img}
+      <div class="card-body">
+        <div class="card-name">${r.name}</div>
+        <div class="card-row">
+          <div><div class="card-rent">${fmt(r.rent)}</div><div class="card-rent-sub">บาท / เดือน</div></div>
+          <span class="badge ${bc}">${r.status}</span>
+        </div>
+        ${note}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">ไม่พบห้องที่ตรงกับเงื่อนไข</div>';
+}
+document.getElementById('q').addEventListener('input', render);
+load().catch(e=>{ document.getElementById('grid').innerHTML = '<div class="empty">โหลดข้อมูลไม่สำเร็จ</div>'; console.error(e); });
+</script>
+</body>
+</html>
