@@ -463,6 +463,37 @@
   .btn-asset-confirm { background: var(--accent); color: #fff; }
   .btn-asset-confirm:disabled { opacity: 0.35; cursor: not-allowed; }
   .btn-asset-skip { background: var(--surface3); color: var(--text2); }
+
+  /* Contract schedule preview table */
+  .schedule-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .schedule-table th, .schedule-table td {
+    border: 1px solid var(--border2); padding: 6px 8px; text-align: center;
+  }
+  .schedule-table th { background: var(--surface2); color: var(--text2); font-weight: 500; }
+  .schedule-table td { color: var(--text); }
+
+  /* Print contract — hidden on screen, shown only when printing */
+  #print-contract { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    #print-contract, #print-contract * { visibility: visible; }
+    #print-contract { display: block; position: absolute; left: 0; top: 0; width: 100%; }
+    .pc-page { padding: 20mm; page-break-after: always; }
+    .pc-page:last-child { page-break-after: auto; }
+  }
+  .pc-page { font-family: 'Sarabun', sans-serif; color: #000; background: #fff; font-size: 14px; line-height: 1.7; max-width: 210mm; margin: 0 auto; }
+  .pc-title { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .pc-subtitle { text-align: center; font-size: 14px; margin-bottom: 18px; }
+  .pc-clause-title { font-weight: 700; margin-top: 14px; margin-bottom: 4px; }
+  .pc-p { margin-bottom: 6px; text-align: justify; }
+  .pc-sub { margin-left: 20px; margin-bottom: 6px; text-align: justify; }
+  .pc-sign-block { display: flex; justify-content: space-around; margin-top: 40px; text-align: center; }
+  .pc-sign-block div { width: 45%; }
+  .pc-sign-line { border-bottom: 1px dotted #000; margin-bottom: 6px; height: 24px; }
+  .pc-photo { max-width: 100%; max-height: 300px; display: block; margin: 12px auto; border: 1px solid #999; }
+  .pc-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  .pc-table th, .pc-table td { border: 1px solid #000; padding: 5px 6px; text-align: center; }
+  .pc-table th { background: #eee; }
 </style>
 </head>
 <body>
@@ -481,6 +512,7 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('upload', this)">📤 อัปโหลดสัญญา</button>
+    <button class="tab-btn" onclick="requestProtected('create', this)">🔒 ✍️ สร้างสัญญาใหม่</button>
     <button class="tab-btn" onclick="requestProtected('contracts', this)">🔒 สัญญาเช่าทั้งหมด</button>
     <button class="tab-btn" onclick="requestProtected('history', this)">🔒 ประวัติ</button>
   </div>
@@ -615,6 +647,110 @@
 
   </div>
 
+  <!-- Create Contract Tab (password-protected) -->
+  <div class="tab-panel" id="tab-create">
+
+    <div class="upload-card">
+      <h3>👤 ผู้ให้เช่า (จำไว้อัตโนมัติ)</h3>
+      <div class="settings-card">
+        <div class="field"><label>ชื่อ-นามสกุล</label><input id="cf-landlord-name" placeholder="นาย/นาง/นางสาว ..."></div>
+        <div class="field"><label>อายุ (ปี)</label><input id="cf-landlord-age" type="number"></div>
+        <div class="field field-full"><label>ที่อยู่</label><input id="cf-landlord-address" placeholder="บ้านเลขที่ ..."></div>
+        <div class="field"><label>เลขบัตรประชาชน</label><input id="cf-landlord-idcard"></div>
+      </div>
+    </div>
+
+    <div class="upload-card">
+      <h3>🧑 ผู้เช่า</h3>
+      <div class="settings-card">
+        <div class="field"><label>ชื่อ-นามสกุล</label><input id="cf-tenant-name" placeholder="นาย/นาง/นางสาว ..."></div>
+        <div class="field"><label>อายุ (ปี)</label><input id="cf-tenant-age" type="number"></div>
+        <div class="field field-full"><label>ที่อยู่</label><input id="cf-tenant-address" placeholder="บ้านเลขที่ ..."></div>
+        <div class="field"><label>เลขบัตรประชาชน</label><input id="cf-tenant-idcard"></div>
+        <div class="field"><label>เบอร์โทร</label><input id="cf-tenant-phone"></div>
+        <div class="field field-full"><label>อีเมล</label><input id="cf-tenant-email" type="email"></div>
+      </div>
+    </div>
+
+    <div class="upload-card">
+      <h3>🏠 ทรัพย์สินที่เช่า</h3>
+      <div class="settings-card">
+        <div class="field"><label>บ้าน/ห้องชุดเลขที่</label><input id="cf-room-no" placeholder="เช่น 841"></div>
+        <div class="field"><label>อาคาร/หมู่บ้าน</label><input id="cf-building"></div>
+        <div class="field"><label>ชั้นที่</label><input id="cf-floor"></div>
+        <div class="field"><label>ห้องเลขที่</label><input id="cf-room-code"></div>
+        <div class="field field-full"><label>ที่อยู่ (ถนน/ตำบล/อำเภอ/จังหวัด/รหัสไปรษณีย์)</label><input id="cf-address" placeholder="ถนน ... ตำบล/แขวง ... อำเภอ/เขต ... จังหวัด ... รหัสไปรษณีย์ ..."></div>
+        <div class="field"><label>เนื้อที่ (ตร.ม.)</label><input id="cf-area" type="number"></div>
+      </div>
+      <div class="upload-zone" id="photo-drop-zone" style="margin-top:10px;">
+        <input type="file" id="cf-photo-input" accept="image/*" onchange="handleRoomPhoto(this.files)">
+        <div class="upload-icon">🖼️</div>
+        <div class="upload-text">คลิกหรือลากรูปห้องมาวางที่นี่</div>
+        <div class="upload-sub">แนบไว้ในสัญญาที่พิมพ์ (ไม่บังคับ)</div>
+      </div>
+      <div id="photo-preview" style="display:none;margin-top:10px;">
+        <img id="photo-preview-img" style="max-width:100%;max-height:220px;border-radius:var(--radius-sm);display:block;">
+        <button class="btn btn-outline" style="margin-top:8px;" onclick="clearRoomPhoto()">ลบรูป</button>
+      </div>
+    </div>
+
+    <div class="upload-card">
+      <h3>📅 ระยะเวลาเช่า / ค่าเช่า</h3>
+      <div class="settings-card">
+        <div class="field"><label>วันเริ่มสัญญา</label><input id="cf-start" type="date"></div>
+        <div class="field"><label>วันสิ้นสุดสัญญา</label><input id="cf-end" type="date"></div>
+        <div class="field"><label>แจ้งต่อสัญญาล่วงหน้า (วัน)</label><input id="cf-renew-notice" type="number" value="30"></div>
+        <div class="field"><label>ค่าเช่า (บาท/เดือน)</label><input id="cf-rent" type="number"></div>
+        <div class="field"><label>ชำระภายในวันที่ (ของทุกเดือน)</label><input id="cf-due-day" type="number" min="1" max="31" value="1"></div>
+        <div class="field"><label>ค่าปรับล่าช้า (%/วัน)</label><input id="cf-late-fee" type="number" step="0.1" value="1"></div>
+        <div class="field"><label>ค้างชำระกี่เดือนถึงเลิกสัญญาได้</label><input id="cf-overdue-months" type="number" value="2"></div>
+        <div class="field"><label>วิธีชำระ</label>
+          <select id="cf-pay-method"><option value="โอนเข้าบัญชีธนาคาร">โอนเข้าบัญชีธนาคาร</option><option value="เงินสด">เงินสด</option></select>
+        </div>
+        <div class="field"><label>ชื่อบัญชี</label><input id="cf-bank-account-name"></div>
+        <div class="field"><label>เลขที่บัญชี</label><input id="cf-bank-account-no"></div>
+        <div class="field"><label>ธนาคาร</label><input id="cf-bank-name"></div>
+      </div>
+    </div>
+
+    <div class="upload-card">
+      <h3>💰 เงินประกันการเช่า</h3>
+      <div class="settings-card">
+        <div class="field"><label>จำนวนเงินประกัน (บาท)</label><input id="cf-deposit" type="number"></div>
+        <div class="field"><label>คืนเงินประกันภายใน (วัน)</label><input id="cf-deposit-return" type="number" value="30"></div>
+      </div>
+    </div>
+
+    <div class="upload-card">
+      <h3>📋 เงื่อนไขอื่นๆ (ปรับได้)</h3>
+      <div class="settings-card">
+        <div class="field"><label>แจ้งตรวจสอบห้องล่วงหน้า (วัน)</label><input id="cf-inspect-notice" type="number" value="3"></div>
+        <div class="field"><label>แก้ไขผิดสัญญาภายใน (วัน)</label><input id="cf-breach-fix" type="number" value="15"></div>
+        <div class="field"><label>ขนย้ายภายในหลังเลิกสัญญา (วัน)</label><input id="cf-move-out" type="number" value="15"></div>
+        <div class="field"><label>แจ้งเลิกสัญญาก่อนกำหนด (วัน)</label><input id="cf-terminate-notice" type="number" value="30"></div>
+        <div class="field"><label>ทำสัญญาที่</label><input id="cf-place" placeholder="เช่น กรุงเทพมหานคร"></div>
+        <div class="field"><label>วันที่ทำสัญญา</label><input id="cf-sign-date" type="date"></div>
+        <div class="field"><label>พยานคนที่ 1 (ไม่บังคับ)</label><input id="cf-witness1"></div>
+        <div class="field"><label>พยานคนที่ 2 (ไม่บังคับ)</label><input id="cf-witness2"></div>
+      </div>
+    </div>
+
+    <div class="upload-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <h3 style="margin:0;">🧾 ตารางกำหนดการชำระค่าเช่า (คำนวณอัตโนมัติ)</h3>
+        <button class="btn-reload" onclick="renderSchedulePreview()">↺ คำนวณใหม่</button>
+      </div>
+      <div id="schedule-preview"><div class="empty-state"><div class="empty-icon">🧾</div><div>กรอกวันเริ่ม/สิ้นสุดสัญญา ค่าเช่า และวันชำระ แล้วกด "คำนวณใหม่"</div></div></div>
+    </div>
+
+    <div class="upload-card">
+      <button class="btn btn-primary" onclick="printContract()">🖨️ พิมพ์สัญญา</button>
+      <button class="btn btn-success" onclick="saveContractToNotion()">💾 บันทึกลง Notion</button>
+      <div id="create-notion-statuses"></div>
+    </div>
+
+  </div>
+
   <!-- Contracts Tab (password-protected) -->
   <div class="tab-panel" id="tab-contracts">
     <div class="upload-card">
@@ -651,6 +787,8 @@
   </div>
 
 </div>
+
+<div id="print-contract"></div>
 
 <script>
 
@@ -710,6 +848,9 @@ function closePwModal() {
 
 function init() {
   renderHistory();
+  loadLandlordProfile();
+  const signDateEl = document.getElementById('cf-sign-date');
+  if (signDateEl && !signDateEl.value) signDateEl.value = new Date().toISOString().slice(0, 10);
 }
 
 // ---- Tabs ----
@@ -1577,6 +1718,358 @@ dropZone.addEventListener('drop', e => {
   dropZone.style.borderColor = '';
   handleFiles(e.dataTransfer.files);
 });
+
+// ═══════════════════════════════════════════════════════════════
+// ---- Create Contract (fill form → auto rent schedule → print) ----
+// ═══════════════════════════════════════════════════════════════
+
+const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+function toBuddhistYear(y) { return y + 543; }
+function thaiDateLabel(d) { return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${toBuddhistYear(d.getFullYear())}`; }
+function thaiMonthYearLabel(d) { return `${THAI_MONTHS[d.getMonth()]} ${toBuddhistYear(d.getFullYear())}`; }
+function thaiFullDateText(dateStr) {
+  if (!dateStr) return '......... เดือน ......................... พ.ศ. .............';
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getDate()} เดือน ${THAI_MONTHS[d.getMonth()]} พ.ศ. ${toBuddhistYear(d.getFullYear())}`;
+}
+
+// ---- Thai baht-text (spelled-out amount, required by Thai legal-doc convention) ----
+function thaiNumberText(numStr) {
+  const digits = ['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+  const positions = ['','สิบ','ร้อย','พัน','หมื่น','แสน'];
+  if (numStr === '0') return '';
+  let result = '';
+  const len = numStr.length;
+  for (let i = 0; i < len; i++) {
+    const d = +numStr[i];
+    const posFromRight = len - i - 1;
+    const posInGroup = posFromRight % 6;
+    if (d !== 0) {
+      if (posInGroup === 0 && d === 1 && len > 1) result += 'เอ็ด';
+      else if (posInGroup === 1 && d === 1) result += 'สิบ';
+      else if (posInGroup === 1 && d === 2) result += 'ยี่สิบ';
+      else result += digits[d] + positions[posInGroup];
+    }
+    if (posFromRight > 0 && posFromRight % 6 === 0) result += 'ล้าน';
+  }
+  return result;
+}
+function thaiBahtText(amount) {
+  amount = Math.round((amount || 0) * 100) / 100;
+  const baht = Math.floor(amount);
+  const satang = Math.round((amount - baht) * 100);
+  let text = (baht === 0 ? 'ศูนย์' : thaiNumberText(String(baht))) + 'บาท';
+  text += satang === 0 ? 'ถ้วน' : (thaiNumberText(String(satang)) + 'สตางค์');
+  return text;
+}
+
+function durationText(startStr, endStr) {
+  if (!startStr || !endStr) return '';
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months--;
+  if (months < 0) months = 0;
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  const parts = [];
+  if (years) parts.push(`${years} ปี`);
+  if (remMonths || !years) parts.push(`${remMonths} เดือน`);
+  return parts.join(' ');
+}
+
+// due day clamped to the last real day of the month (e.g. due day 31 in Feb → Feb 28/29, not roll into March)
+function dueDateInMonth(year, month, dueDay) {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return new Date(year, month, Math.min(dueDay, lastDay));
+}
+
+function computeRentSchedule(startStr, endStr, dueDay, rent) {
+  if (!startStr || !endStr || !dueDay) return [];
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  if (isNaN(start) || isNaN(end) || end <= start) return [];
+
+  let cursor = dueDateInMonth(start.getFullYear(), start.getMonth(), dueDay);
+  if (cursor < start) cursor = dueDateInMonth(start.getFullYear(), start.getMonth() + 1, dueDay);
+
+  const rows = [];
+  let no = 1;
+  while (cursor <= end) {
+    rows.push({ no, monthLabel: thaiMonthYearLabel(cursor), dueLabel: thaiDateLabel(cursor), amount: rent || 0 });
+    no++;
+    cursor = dueDateInMonth(cursor.getFullYear(), cursor.getMonth() + 1, dueDay);
+  }
+  return rows;
+}
+
+// ---- Room photo ----
+let _roomPhotoFile = null;
+let _roomPhotoDataUrl = '';
+
+function handleRoomPhoto(fileList) {
+  const file = fileList[0];
+  if (!file) return;
+  _roomPhotoFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _roomPhotoDataUrl = e.target.result;
+    document.getElementById('photo-preview-img').src = _roomPhotoDataUrl;
+    document.getElementById('photo-preview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+function clearRoomPhoto() {
+  _roomPhotoFile = null;
+  _roomPhotoDataUrl = '';
+  document.getElementById('cf-photo-input').value = '';
+  document.getElementById('photo-preview').style.display = 'none';
+}
+
+// ---- Landlord profile (remembered across contracts — same person every time) ----
+function loadLandlordProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem('la_landlord_profile') || 'null');
+    if (!p) return;
+    document.getElementById('cf-landlord-name').value    = p.name || '';
+    document.getElementById('cf-landlord-age').value     = p.age || '';
+    document.getElementById('cf-landlord-address').value = p.address || '';
+    document.getElementById('cf-landlord-idcard').value  = p.idCard || '';
+  } catch {}
+}
+function saveLandlordProfile() {
+  localStorage.setItem('la_landlord_profile', JSON.stringify({
+    name:    document.getElementById('cf-landlord-name').value.trim(),
+    age:     document.getElementById('cf-landlord-age').value.trim(),
+    address: document.getElementById('cf-landlord-address').value.trim(),
+    idCard:  document.getElementById('cf-landlord-idcard').value.trim(),
+  }));
+}
+
+function gatherContractForm() {
+  const g  = id => document.getElementById(id).value.trim();
+  const gn = id => +document.getElementById(id).value || 0;
+  return {
+    landlordName: g('cf-landlord-name'), landlordAge: g('cf-landlord-age'), landlordAddress: g('cf-landlord-address'), landlordIdCard: g('cf-landlord-idcard'),
+    tenantName: g('cf-tenant-name'), tenantAge: g('cf-tenant-age'), tenantAddress: g('cf-tenant-address'), tenantIdCard: g('cf-tenant-idcard'), tenantPhone: g('cf-tenant-phone'), tenantEmail: g('cf-tenant-email'),
+    roomNo: g('cf-room-no'), building: g('cf-building'), floor: g('cf-floor'), roomCode: g('cf-room-code'), address: g('cf-address'), area: g('cf-area'),
+    start: g('cf-start'), end: g('cf-end'), renewNotice: gn('cf-renew-notice'),
+    rent: gn('cf-rent'), dueDay: gn('cf-due-day'), lateFee: gn('cf-late-fee'), overdueMonths: gn('cf-overdue-months'),
+    payMethod: g('cf-pay-method'), bankAccountName: g('cf-bank-account-name'), bankAccountNo: g('cf-bank-account-no'), bankName: g('cf-bank-name'),
+    deposit: gn('cf-deposit'), depositReturn: gn('cf-deposit-return'),
+    inspectNotice: gn('cf-inspect-notice'), breachFix: gn('cf-breach-fix'), moveOut: gn('cf-move-out'), terminateNotice: gn('cf-terminate-notice'),
+    place: g('cf-place'), signDate: g('cf-sign-date'), witness1: g('cf-witness1'), witness2: g('cf-witness2'),
+  };
+}
+
+function renderSchedulePreview() {
+  const f = gatherContractForm();
+  const rows = computeRentSchedule(f.start, f.end, f.dueDay, f.rent);
+  const box = document.getElementById('schedule-preview');
+  if (!rows.length) {
+    box.innerHTML = `<div class="empty-state"><div class="empty-icon">🧾</div><div>กรอกวันเริ่ม/สิ้นสุดสัญญา ค่าเช่า และวันชำระ ให้ครบก่อน</div></div>`;
+    return rows;
+  }
+  box.innerHTML = `<div style="overflow-x:auto;"><table class="schedule-table"><thead><tr>
+      <th>งวดที่</th><th>ประจำเดือน/ปี</th><th>วันครบกำหนดชำระ</th><th>จำนวนเงิน (บาท)</th>
+    </tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${r.no}</td><td>${r.monthLabel}</td><td>${r.dueLabel}</td><td>${r.amount.toLocaleString()}</td></tr>`).join('')}
+    </tbody></table></div><div style="font-size:11px;color:var(--text3);margin-top:8px;">รวม ${rows.length} งวด</div>`;
+  return rows;
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function blank(v, fallback) {
+  const s = escHtml(v);
+  return s || (fallback !== undefined ? fallback : '..........');
+}
+
+function buildContractHTML(f, rows) {
+  const rentText = thaiBahtText(f.rent);
+  const depositText = thaiBahtText(f.deposit);
+  const durText = durationText(f.start, f.end) || '......... ปี ......... เดือน';
+  const startLabel = f.start ? thaiDateLabel(new Date(f.start + 'T00:00:00')) : '.........................................';
+  const endLabel   = f.end   ? thaiDateLabel(new Date(f.end + 'T00:00:00'))   : '.........................................';
+  const scheduleRows = rows.length ? rows : [{ no: 1, monthLabel: '', dueLabel: '', amount: 0 }];
+  const isTransfer = (f.payMethod || '').includes('โอน');
+
+  return `
+  <div class="pc-page">
+    <div class="pc-title">สัญญาเช่าที่อยู่อาศัย</div>
+    <div class="pc-subtitle">(บ้าน / คอนโดมิเนียม)</div>
+    <div class="pc-p">ทำที่ ${blank(f.place)}&nbsp;&nbsp;&nbsp;วันที่ ${thaiFullDateText(f.signDate)}</div>
+    <div class="pc-p">สัญญาฉบับนี้ทำขึ้นระหว่าง นาย/นาง/นางสาว ${blank(f.landlordName)} อายุ ${blank(f.landlordAge)} ปี อยู่บ้านเลขที่ ${blank(f.landlordAddress)} ถือบัตรประจำตัวประชาชนเลขที่ ${blank(f.landlordIdCard)} ซึ่งต่อไปในสัญญานี้เรียกว่า "ผู้ให้เช่า" ฝ่ายหนึ่ง</div>
+    <div class="pc-p">กับ นาย/นาง/นางสาว ${blank(f.tenantName)} อายุ ${blank(f.tenantAge)} ปี อยู่บ้านเลขที่ ${blank(f.tenantAddress)} ถือบัตรประจำตัวประชาชนเลขที่ ${blank(f.tenantIdCard)} ซึ่งต่อไปในสัญญานี้เรียกว่า "ผู้เช่า" อีกฝ่ายหนึ่ง</div>
+    <div class="pc-p">คู่สัญญาทั้งสองฝ่ายตกลงทำสัญญาเช่ากันไว้ โดยมีข้อความและเงื่อนไขดังต่อไปนี้</div>
+
+    <div class="pc-clause-title">ข้อ 1. ทรัพย์สินที่เช่า</div>
+    <div class="pc-p">ผู้ให้เช่าตกลงให้เช่า และผู้เช่าตกลงเช่า บ้าน/ห้องชุด เลขที่ ${blank(f.roomNo)} อาคาร/หมู่บ้าน ${blank(f.building)} ชั้นที่ ${blank(f.floor)} ห้องเลขที่ ${blank(f.roomCode)}</div>
+    <div class="pc-p">ตั้งอยู่ที่ ${blank(f.address)}</div>
+    <div class="pc-p">มีเนื้อที่ประมาณ ${blank(f.area)} ตารางเมตร ซึ่งต่อไปในสัญญานี้เรียกว่า "ทรัพย์สินที่เช่า" พร้อมทรัพย์สิน เครื่องใช้ และอุปกรณ์ตกแต่งตามที่ระบุไว้ในบัญชีทรัพย์สินแนบท้ายสัญญานี้ (ผนวก ก)</div>
+    ${_roomPhotoDataUrl ? `<img class="pc-photo" src="${_roomPhotoDataUrl}">` : ''}
+
+    <div class="pc-clause-title">ข้อ 2. ระยะเวลาการเช่า</div>
+    <div class="pc-p">สัญญาเช่าฉบับนี้มีกำหนดระยะเวลา ${durText} นับตั้งแต่วันที่ ${startLabel} ถึงวันที่ ${endLabel}</div>
+    <div class="pc-p">เมื่อครบกำหนดระยะเวลาเช่าตามสัญญานี้ หากผู้เช่าประสงค์จะเช่าทรัพย์สินต่อไป ผู้เช่าจะต้องแจ้งความประสงค์เป็นหนังสือให้ผู้ให้เช่าทราบล่วงหน้าไม่น้อยกว่า ${blank(f.renewNotice)} วัน ก่อนวันครบกำหนดสัญญา และการต่อสัญญาจะต้องได้รับความยินยอมจากผู้ให้เช่า โดยคู่สัญญาจะตกลงเงื่อนไขและอัตราค่าเช่ากันใหม่เป็นลายลักษณ์อักษร</div>
+
+    <div class="pc-clause-title">ข้อ 3. ค่าเช่าและกำหนดการชำระเงิน</div>
+    <div class="pc-p">ผู้เช่าตกลงชำระค่าเช่าให้แก่ผู้ให้เช่าในอัตราเดือนละ ${(f.rent||0).toLocaleString()} บาท (${rentText}) โดยชำระเป็นรายเดือน ภายในวันที่ ${blank(f.dueDay)} ของทุกเดือน</div>
+    <div class="pc-sub">3.1 การชำระเงินให้ชำระโดย ${blank(f.payMethod, 'เงินสด / โอนเข้าบัญชีธนาคาร')}${isTransfer ? ` ชื่อบัญชี ${blank(f.bankAccountName)} เลขที่บัญชี ${blank(f.bankAccountNo)} ธนาคาร ${blank(f.bankName)}` : ''} ทั้งนี้ ให้บันทึกการชำระค่าเช่าแต่ละงวดตามตารางกำหนดการชำระค่าเช่าแนบท้ายสัญญานี้ (ผนวก ข)</div>
+    <div class="pc-sub">3.2 หากผู้เช่าชำระค่าเช่าล่าช้ากว่ากำหนด ผู้เช่ายินยอมชำระค่าปรับในอัตราร้อยละ ${blank(f.lateFee)} ต่อวันของค่าเช่าที่ค้างชำระ นับแต่วันที่ครบกำหนดชำระจนถึงวันที่ชำระเสร็จสิ้น</div>
+    <div class="pc-sub">3.3 หากผู้เช่าค้างชำระค่าเช่าติดต่อกันเกิน ${blank(f.overdueMonths)} เดือน ผู้ให้เช่ามีสิทธิบอกเลิกสัญญาได้ทันทีโดยไม่ต้องบอกกล่าวล่วงหน้า</div>
+
+    <div class="pc-clause-title">ข้อ 4. เงินประกันการเช่า</div>
+    <div class="pc-p">ในวันทำสัญญานี้ ผู้เช่าได้วางเงินประกันการเช่าให้แก่ผู้ให้เช่าเป็นจำนวนเงิน ${(f.deposit||0).toLocaleString()} บาท (${depositText}) เพื่อเป็นประกันการปฏิบัติตามสัญญาและความเสียหายที่อาจเกิดขึ้นแก่ทรัพย์สินที่เช่า</div>
+    <div class="pc-sub">4.1 ผู้ให้เช่าจะคืนเงินประกันดังกล่าวให้แก่ผู้เช่าภายใน ${blank(f.depositReturn)} วัน นับแต่วันที่สัญญาสิ้นสุดและผู้เช่าได้ส่งมอบทรัพย์สินที่เช่าคืนในสภาพเรียบร้อย โดยไม่มีดอกเบี้ย</div>
+    <div class="pc-sub">4.2 ผู้ให้เช่ามีสิทธิหักเงินประกันเพื่อชดใช้ค่าเสียหาย ค่าเช่าค้างชำระ ค่าสาธารณูปโภคค้างชำระ หรือค่าใช้จ่ายอื่นใดอันเกิดจากความผิดของผู้เช่า ก่อนคืนเงินส่วนที่เหลือให้แก่ผู้เช่า</div>
+
+    <div class="pc-clause-title">ข้อ 5. ค่าสาธารณูปโภคและค่าใช้จ่ายอื่น</div>
+    <div class="pc-p">ผู้เช่าเป็นผู้รับผิดชอบชำระค่าไฟฟ้า ค่าน้ำประปา ค่าโทรศัพท์ ค่าอินเทอร์เน็ต ค่าส่วนกลาง (ถ้ามี) และค่าสาธารณูปโภคอื่นใดที่เกิดขึ้นจากการใช้ทรัพย์สินที่เช่าตลอดระยะเวลาเช่า โดยชำระตรงต่อหน่วยงานผู้ให้บริการหรือผู้ให้เช่าตามแต่กรณี</div>
+
+    <div class="pc-clause-title">ข้อ 6. หน้าที่และความรับผิดชอบของผู้เช่า</div>
+    <div class="pc-sub">6.1 ผู้เช่าจะต้องใช้ทรัพย์สินที่เช่าเพื่อการอยู่อาศัยเท่านั้น จะไม่นำไปใช้ประกอบกิจการอันผิดกฎหมาย ศีลธรรม หรือก่อความเดือดร้อนรำคาญแก่ผู้อื่น</div>
+    <div class="pc-sub">6.2 ผู้เช่าจะดูแลรักษาทรัพย์สินที่เช่าให้อยู่ในสภาพดี ทำความสะอาด และซ่อมแซมความเสียหายเล็กน้อยอันเกิดจากการใช้งานตามปกติด้วยค่าใช้จ่ายของผู้เช่าเอง</div>
+    <div class="pc-sub">6.3 ผู้เช่าจะไม่ทำการดัดแปลง ต่อเติม หรือเปลี่ยนแปลงโครงสร้างของทรัพย์สินที่เช่า เว้นแต่จะได้รับความยินยอมเป็นลายลักษณ์อักษรจากผู้ให้เช่าก่อน</div>
+    <div class="pc-sub">6.4 ผู้เช่าจะไม่นำทรัพย์สินที่เช่าไปให้เช่าช่วง ปล่อยเช่าต่อ หรือโอนสิทธิการเช่าให้แก่บุคคลอื่น เว้นแต่จะได้รับความยินยอมเป็นลายลักษณ์อักษรจากผู้ให้เช่าก่อนตามหลักเกณฑ์ในข้อ 10</div>
+    <div class="pc-sub">6.5 ผู้เช่าจะอนุญาตให้ผู้ให้เช่าหรือตัวแทนเข้าตรวจสอบสภาพทรัพย์สินที่เช่าได้ตามความเหมาะสม โดยแจ้งล่วงหน้าไม่น้อยกว่า ${blank(f.inspectNotice)} วัน เว้นแต่กรณีฉุกเฉิน</div>
+    <div class="pc-sub">6.6 เมื่อสัญญาเช่าสิ้นสุดลงไม่ว่าด้วยเหตุใด ผู้เช่าจะต้องขนย้ายทรัพย์สินและบริวารออกจากทรัพย์สินที่เช่า พร้อมส่งมอบทรัพย์สินที่เช่าคืนแก่ผู้ให้เช่าในสภาพเรียบร้อยดังเช่นวันที่รับมอบ เว้นแต่การเสื่อมสภาพตามการใช้งานปกติ</div>
+
+    <div class="pc-clause-title">ข้อ 7. หน้าที่และความรับผิดชอบของผู้ให้เช่า</div>
+    <div class="pc-sub">7.1 ผู้ให้เช่ารับรองว่าเป็นเจ้าของกรรมสิทธิ์หรือผู้มีสิทธิให้เช่าทรัพย์สินที่เช่าโดยชอบด้วยกฎหมาย และมีอำนาจให้เช่าตามสัญญานี้</div>
+    <div class="pc-sub">7.2 ผู้ให้เช่าจะส่งมอบทรัพย์สินที่เช่าในสภาพที่เหมาะสมแก่การอยู่อาศัย พร้อมสาธารณูปโภคพื้นฐานใช้งานได้ตามปกติ</div>
+    <div class="pc-sub">7.3 ผู้ให้เช่าจะเป็นผู้รับผิดชอบซ่อมแซมความเสียหายของโครงสร้างอาคาร ระบบไฟฟ้า ระบบประปา และอุปกรณ์หลักที่ชำรุดโดยมิได้เกิดจากความผิดของผู้เช่า</div>
+    <div class="pc-sub">7.4 ผู้ให้เช่าจะไม่เข้าไปในทรัพย์สินที่เช่าโดยไม่ได้รับความยินยอมจากผู้เช่า เว้นแต่กรณีฉุกเฉินหรือได้แจ้งล่วงหน้าตามข้อ 6.5</div>
+
+    <div class="pc-clause-title">ข้อ 8. ข้อห้ามในการใช้ทรัพย์สินที่เช่า</div>
+    <div class="pc-p">ผู้เช่าตกลงจะไม่กระทำการดังต่อไปนี้ในทรัพย์สินที่เช่า</div>
+    <div class="pc-sub">• เก็บ ครอบครอง หรือใช้วัตถุไวไฟ วัตถุระเบิด หรือสารอันตรายทุกชนิด</div>
+    <div class="pc-sub">• เลี้ยงสัตว์ที่ก่อให้เกิดความเดือดร้อนรำคาญ เว้นแต่ได้รับความยินยอมล่วงหน้าเป็นลายลักษณ์อักษร</div>
+    <div class="pc-sub">• ใช้ทรัพย์สินที่เช่าเป็นสถานที่มั่วสุม เล่นการพนัน หรือกระทำการอันผิดกฎหมาย</div>
+    <div class="pc-sub">• ก่อเสียงดังหรือความรำคาญอันเป็นการรบกวนผู้อยู่อาศัยข้างเคียงเกินสมควร</div>
+
+    <div class="pc-clause-title">ข้อ 9. มาตรการเกี่ยวกับยาเสพติดและสิ่งผิดกฎหมาย</div>
+    <div class="pc-sub">9.1 ผู้เช่าและบริวารตกลงจะไม่ผลิต จำหน่าย ซื้อขาย ขนย้าย เสพ หรือมีไว้ในครอบครองซึ่งยาเสพติดให้โทษ วัตถุออกฤทธิ์ต่อจิตและประสาท หรือสิ่งผิดกฎหมายใด ๆ ภายในทรัพย์สินที่เช่าโดยเด็ดขาด ไม่ว่าจะกระทำด้วยตนเองหรือยินยอมให้บุคคลอื่นกระทำ</div>
+    <div class="pc-sub">9.2 หากปรากฏหรือมีเหตุอันควรเชื่อได้ว่าผู้เช่าหรือบริวารฝ่าฝืนข้อ 9.1 ไม่ว่าจะมีการจับกุมหรือคำพิพากษาถึงที่สุดหรือไม่ก็ตาม ให้ถือเป็นการผิดสัญญาอย่างร้ายแรง ผู้ให้เช่ามีสิทธิบอกเลิกสัญญาได้ทันทีโดยไม่ต้องบอกกล่าวล่วงหน้าตามข้อ 12 และไม่ต้องคืนเงินประกันการเช่าตามข้อ 4 โดยผู้เช่าตกลงจะขนย้ายทรัพย์สินและบริวารออกจากทรัพย์สินที่เช่าภายใน 7 วันนับแต่วันที่ได้รับแจ้ง</div>
+    <div class="pc-sub">9.3 ผู้ให้เช่ามีสิทธิแจ้งความหรือประสานงานกับเจ้าหน้าที่ตำรวจหรือหน่วยงานราชการที่เกี่ยวข้องเพื่อดำเนินการตามกฎหมาย รวมถึงมีสิทธิเข้าตรวจสอบทรัพย์สินที่เช่าได้ทันทีเมื่อมีเหตุอันควรสงสัยว่ามีการกระทำผิดตามข้อนี้ โดยไม่จำต้องแจ้งล่วงหน้าตามข้อ 6.5</div>
+    <div class="pc-sub">9.4 ผู้เช่าตกลงรับผิดชอบต่อความเสียหาย ค่าปรับ หรือความรับผิดทางกฎหมายใด ๆ อันเกิดแก่ผู้ให้เช่าหรือบุคคลภายนอกอันเนื่องมาจากการฝ่าฝืนข้อกำหนดในข้อนี้แต่เพียงผู้เดียว</div>
+
+    <div class="pc-clause-title">ข้อ 10. การเช่าช่วง การโอนสิทธิ และการปล่อยเช่าต่อ</div>
+    <div class="pc-sub">10.1 ผู้เช่าจะไม่นำทรัพย์สินที่เช่าไม่ว่าทั้งหมดหรือบางส่วนไปให้เช่าช่วง ปล่อยเช่าต่อ ปล่อยเช่าในลักษณะที่พักรายวัน/รายสัปดาห์แก่นักท่องเที่ยวหรือบุคคลทั่วไป โอนสิทธิการเช่า หรือให้บุคคลอื่นซึ่งมิใช่บริวารที่แจ้งไว้เข้าอยู่อาศัยแทนตน ไม่ว่าจะมีค่าตอบแทนหรือไม่ก็ตาม เว้นแต่จะได้รับความยินยอมเป็นหนังสือจากผู้ให้เช่าก่อนล่วงหน้าทุกครั้ง</div>
+    <div class="pc-sub">10.2 กรณีผู้เช่าประสงค์จะขอเช่าช่วงหรือปล่อยเช่าต่อ ผู้เช่าจะต้องแจ้งรายละเอียดผู้เช่าช่วง วัตถุประสงค์การใช้ และระยะเวลา ให้ผู้ให้เช่าพิจารณาเป็นลายลักษณ์อักษรล่วงหน้าไม่น้อยกว่า 15 วัน ทั้งนี้ แม้จะได้รับอนุญาตให้เช่าช่วงแล้ว ผู้เช่ายังคงต้องรับผิดตามสัญญานี้ต่อผู้ให้เช่าโดยตรงทุกประการ รวมถึงพฤติกรรมของผู้เช่าช่วง</div>
+    <div class="pc-sub">10.3 การฝ่าฝืนข้อ 10.1 ให้ถือเป็นการผิดสัญญาอย่างร้ายแรง ผู้ให้เช่ามีสิทธิบอกเลิกสัญญาได้ทันทีโดยไม่ต้องบอกกล่าวล่วงหน้าตามข้อ 12 และมีสิทธิริบเงินประกันการเช่าตามข้อ 4 ทั้งหมดหรือบางส่วนเพื่อชดใช้ค่าเสียหาย</div>
+
+    <div class="pc-clause-title">ข้อ 11. การประกันภัย</div>
+    <div class="pc-p">ผู้ให้เช่าจะจัดให้มีการทำประกันภัยตัวอาคาร/ห้องชุดตามความเหมาะสม ส่วนผู้เช่าตกลงจะรับผิดชอบต่อความเสียหายที่เกิดแก่ทรัพย์สินภายในห้องอันเกิดจากความประมาทเลินเล่อของผู้เช่า และผู้เช่าอาจพิจารณาทำประกันภัยทรัพย์สินส่วนตัวได้ตามความสมัครใจ</div>
+
+    <div class="pc-clause-title">ข้อ 12. การผิดสัญญาและการบอกเลิกสัญญา</div>
+    <div class="pc-sub">12.1 หากฝ่ายใดฝ่ายหนึ่งผิดสัญญาข้อหนึ่งข้อใด และไม่แก้ไขเยียวยาภายใน ${blank(f.breachFix)} วัน นับแต่วันที่ได้รับหนังสือบอกกล่าวจากอีกฝ่ายหนึ่ง ผู้ทรงสิทธิ์มีสิทธิบอกเลิกสัญญาได้ทันที</div>
+    <div class="pc-sub">12.2 ในกรณีผู้เช่าผิดสัญญาและผู้ให้เช่าใช้สิทธิบอกเลิกสัญญา ผู้เช่ายินยอมขนย้ายทรัพย์สินและบริวารออกจากทรัพย์สินที่เช่าภายใน ${blank(f.moveOut)} วัน และผู้ให้เช่ามีสิทธิริบเงินประกันตามข้อ 4 เพื่อชดใช้ความเสียหายที่เกิดขึ้น</div>
+    <div class="pc-sub">12.3 คู่สัญญาฝ่ายใดฝ่ายหนึ่งอาจบอกเลิกสัญญาก่อนครบกำหนดได้ โดยแจ้งเป็นหนังสือให้อีกฝ่ายทราบล่วงหน้าไม่น้อยกว่า ${blank(f.terminateNotice)} วัน ทั้งนี้ ฝ่ายที่บอกเลิกสัญญาก่อนกำหนดโดยไม่มีเหตุผิดสัญญาของอีกฝ่าย อาจต้องรับผิดชดใช้ค่าเสียหายตามที่ตกลงกันหรือตามกฎหมาย</div>
+    <div class="pc-sub">12.4 กรณีผิดสัญญาตามข้อ 9 (ยาเสพติดและสิ่งผิดกฎหมาย) หรือข้อ 10.1 (การเช่าช่วง/ปล่อยเช่าต่อโดยไม่ได้รับอนุญาต) ผู้ให้เช่ามีสิทธิบอกเลิกสัญญาได้ทันทีโดยไม่ต้องปฏิบัติตามระยะเวลาผ่อนผันในข้อ 12.1</div>
+
+    <div class="pc-clause-title">ข้อ 13. การส่งหนังสือบอกกล่าว</div>
+    <div class="pc-p">หนังสือ คำบอกกล่าว หรือการติดต่อใด ๆ ตามสัญญานี้ ให้ถือว่าได้ส่งโดยชอบแล้ว หากได้ส่งถึงตามที่อยู่ที่ระบุไว้ในสัญญานี้ ไม่ว่าจะโดยทางไปรษณีย์ลงทะเบียนตอบรับ หรือส่งมอบด้วยตนเอง หรือทางอีเมล/ข้อความอิเล็กทรอนิกส์ที่คู่สัญญาแจ้งไว้เป็นลายลักษณ์อักษร</div>
+
+    <div class="pc-clause-title">ข้อ 14. ข้อตกลงทั่วไป</div>
+    <div class="pc-sub">14.1 การแก้ไขเปลี่ยนแปลงข้อความใด ๆ ในสัญญานี้ จะต้องทำเป็นหนังสือและลงลายมือชื่อคู่สัญญาทั้งสองฝ่ายจึงจะมีผลผูกพัน</div>
+    <div class="pc-sub">14.2 หากข้อความส่วนใดส่วนหนึ่งของสัญญานี้เป็นโมฆะหรือใช้บังคับไม่ได้ ให้ข้อความส่วนที่เหลือยังคงมีผลใช้บังคับได้ต่อไป</div>
+    <div class="pc-sub">14.3 สัญญานี้ให้เป็นไปตามและตีความตามกฎหมายไทย และให้ศาลไทยที่มีเขตอำนาจเป็นผู้มีอำนาจพิจารณาข้อพิพาทที่เกิดขึ้นจากสัญญานี้</div>
+
+    <div class="pc-p">คู่สัญญาทั้งสองฝ่ายได้อ่านและเข้าใจข้อความในสัญญานี้โดยตลอดแล้ว เห็นว่าถูกต้องตรงตามเจตนาของคู่สัญญาทุกประการ จึงได้ลงลายมือชื่อไว้เป็นสำคัญต่อหน้าพยาน</div>
+
+    <div class="pc-sign-block">
+      <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. ผู้ให้เช่า<br>(${blank(f.landlordName, '.................................................')})</div>
+      <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. ผู้เช่า<br>(${blank(f.tenantName, '.................................................')})</div>
+    </div>
+    <div class="pc-sign-block" style="margin-top:20px;">
+      <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. พยาน<br>(${blank(f.witness1, '.................................................')})</div>
+      <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. พยาน<br>(${blank(f.witness2, '.................................................')})</div>
+    </div>
+  </div>
+
+  <div class="pc-page">
+    <div class="pc-title" style="font-size:16px;">ผนวก ก. บัญชีทรัพย์สินและอุปกรณ์ตกแต่งที่ให้เช่าพร้อมทรัพย์สินที่เช่า</div>
+    <table class="pc-table">
+      <thead><tr><th style="width:8%;">ลำดับ</th><th>รายการ</th><th style="width:12%;">จำนวน</th><th style="width:25%;">สภาพ/หมายเหตุ</th></tr></thead>
+      <tbody>${Array.from({ length: 12 }, (_, i) => `<tr><td>${i+1}</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join('')}</tbody>
+    </table>
+    <div class="pc-p" style="margin-top:14px;">ผู้ให้เช่าและผู้เช่าได้ร่วมกันตรวจสอบสภาพทรัพย์สินและรายการดังกล่าวข้างต้นแล้ว ตรงตามความเป็นจริงทุกประการ ณ วันที่ส่งมอบทรัพย์สินที่เช่า</div>
+    <div class="pc-sign-block">
+      <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. ผู้ให้เช่า</div>
+      <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. ผู้เช่า</div>
+    </div>
+  </div>
+
+  <div class="pc-page">
+    <div class="pc-title" style="font-size:16px;">ผนวก ข. ตารางกำหนดการชำระค่าเช่า</div>
+    <div class="pc-p" style="text-align:center;">(อัตราค่าเช่าเดือนละ ${(f.rent||0).toLocaleString()} บาท ชำระภายในวันที่ ${blank(f.dueDay)} ของทุกเดือน ตามข้อ 3)</div>
+    <table class="pc-table">
+      <thead><tr><th>งวดที่</th><th>ประจำเดือน/ปี</th><th>วันครบกำหนดชำระ</th><th>จำนวนเงิน (บาท)</th><th>วันที่ชำระจริง</th><th>ลงชื่อผู้รับเงิน</th></tr></thead>
+      <tbody>${scheduleRows.map(r => `<tr><td>${r.no}</td><td>${r.monthLabel || '&nbsp;'}</td><td>${r.dueLabel || '&nbsp;'}</td><td>${r.amount ? r.amount.toLocaleString() : '&nbsp;'}</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join('')}</tbody>
+    </table>
+    <div class="pc-p" style="margin-top:10px;font-size:12px;">หมายเหตุ: ตารางนี้ใช้สำหรับบันทึกการชำระค่าเช่าในแต่ละงวดตลอดระยะเวลาเช่า มิใช่การกำหนดจำนวนงวดตายตัว หากระยะเวลาเช่ามากหรือน้อยกว่า 12 เดือน ให้คู่สัญญาปรับจำนวนงวดตามความเหมาะสม</div>
+  </div>
+  `;
+}
+
+function printContract() {
+  const f = gatherContractForm();
+  if (!f.landlordName || !f.tenantName || !f.start || !f.end || !f.rent) {
+    alert('กรุณากรอกอย่างน้อย: ชื่อผู้ให้เช่า, ชื่อผู้เช่า, วันเริ่ม/สิ้นสุดสัญญา, ค่าเช่า');
+    return;
+  }
+  saveLandlordProfile();
+  const rows = computeRentSchedule(f.start, f.end, f.dueDay, f.rent);
+  renderSchedulePreview();
+  document.getElementById('print-contract').innerHTML = buildContractHTML(f, rows);
+  setTimeout(() => window.print(), 100);
+}
+
+async function saveContractToNotion() {
+  const f = gatherContractForm();
+  if (!f.tenantName) { alert('กรุณากรอกชื่อผู้เช่าก่อนบันทึก'); return; }
+  saveLandlordProfile();
+
+  const statuses = document.getElementById('create-notion-statuses');
+  statuses.innerHTML = '';
+  addNotionStatus(statuses, 'saving', '📄 กำลังบันทึกลง LeaseAI — สัญญาเช่า...');
+
+  const property = [f.building, f.roomCode || f.roomNo].filter(Boolean).join(' ');
+  const props = {
+    'ชื่อผู้เช่า':       { title:     [{ text: { content: f.tenantName || 'ไม่ระบุ' } }] },
+    'ทรัพย์สิน / ห้อง': { rich_text: [{ text: { content: property } }] },
+    'สถานะสัญญา':       { select:    { name: 'ใช้งานอยู่' } },
+    'สถานะการชำระ':     { select:    { name: 'รอชำระ' } },
+  };
+  if (f.rent)        props['ค่าเช่า (บาท/เดือน)'] = { number: f.rent };
+  if (f.deposit)     props['เงินมัดจำ (บาท)']     = { number: f.deposit };
+  if (f.dueDay)      props['วันครบชำระ']          = { number: f.dueDay };
+  if (f.tenantPhone) props['เบอร์โทรผู้เช่า']     = { phone_number: f.tenantPhone };
+  if (f.tenantEmail) props['อีเมลผู้เช่า']        = { email: f.tenantEmail };
+  if (f.start)       props['วันเริ่มสัญญา']       = { date: { start: f.start } };
+  if (f.end)         props['วันหมดสัญญา']         = { date: { start: f.end } };
+
+  if (_roomPhotoFile) {
+    try {
+      const fileUrl = await uploadFile(_roomPhotoFile);
+      props['ต้นฉบับสัญญา'] = { files: [{ name: _roomPhotoFile.name, type: 'external', external: { url: fileUrl } }] };
+    } catch { /* บันทึกข้อมูลโดยไม่มีรูปถ้าอัปโหลดไม่สำเร็จ */ }
+  }
+
+  try {
+    const res = await fetch('/api/notion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method: 'POST', path: 'pages', data: { parent: { database_id: BUILTIN_CONFIG.leaseDb }, properties: props } })
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
+    addNotionStatus(statuses, 'saved', '✅ บันทึกลง LeaseAI — สัญญาเช่า เรียบร้อยแล้ว');
+  } catch (e) {
+    addNotionStatus(statuses, 'error', '❌ บันทึกไม่สำเร็จ: ' + e.message);
+  }
+}
 
 init();
 </script>
