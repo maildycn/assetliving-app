@@ -796,6 +796,7 @@
   const BUILTIN_CONFIG = {
     leaseDb: '0d3ce732aec048f298c93baa788b5306',
     assetDb: '2f4d4897dfba809596fedaf2fa3bf102',
+    incomeDb: 'fed30ed4e4764098b0741175d404f001',
   };
 
 // ---- State ----
@@ -2066,8 +2067,46 @@ async function saveContractToNotion() {
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
     addNotionStatus(statuses, 'saved', '✅ บันทึกลง LeaseAI — สัญญาเช่า เรียบร้อยแล้ว');
+    await saveInitialPaymentsToNotion(f, property, statuses);
   } catch (e) {
     addNotionStatus(statuses, 'error', '❌ บันทึกไม่สำเร็จ: ' + e.message);
+  }
+}
+
+// วันแรกที่ทำสัญญา ผู้เช่าจ่ายเงินประกัน 2 เดือน + ค่าเช่าล่วงหน้า 1 เดือนเสมอ — บันทึกลง Income DB ไว้ล่วงหน้าทันทีที่สร้างสัญญา
+// ไม่ต้องรอสลิปผ่านบอท เพราะเงินสองก้อนนี้มักจ่ายกันหน้างานตอนเซ็นสัญญา ไม่ได้โอนผ่านช่องทางที่บอทอ่านสลิปเห็น
+async function saveInitialPaymentsToNotion(f, property, statuses) {
+  if (!f.rent) return; // ไม่มีค่าเช่า คำนวณเงินประกัน/ค่าเช่าล่วงหน้าไม่ได้
+  const monthKey = (f.start || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  const entries = [
+    { label: 'เงินประกัน', months: 2, category: 'เงินประกัน' },
+    { label: 'ค่าเช่าล่วงหน้า', months: 1, category: 'ค่าเช่า' },
+  ];
+  for (const e of entries) {
+    const amount = f.rent * e.months;
+    addNotionStatus(statuses, 'saving', `💰 กำลังบันทึก${e.label} (฿${amount.toLocaleString()})...`);
+    const props = {
+      'รายการ':           { title: [{ text: { content: `${e.label} ${property} ${f.start || ''}` } }] },
+      'ประเภท':            { select: { name: 'รายรับ' } },
+      'หมวดหมู่':          { select: { name: e.category } },
+      'จำนวนเงิน (บาท)':  { number: amount },
+      'สถานะ':             { select: { name: 'เสร็จสิ้น' } },
+      'ห้อง / ทรัพย์สิน':  { rich_text: [{ text: { content: property } }] },
+      'รอบเดือน':          { select: { name: monthKey } },
+      'หมายเหตุ':          { rich_text: [{ text: { content: `บันทึกอัตโนมัติตอนสร้างสัญญาใหม่ — ${e.label} ${e.months} เดือน (${f.rent.toLocaleString()} x ${e.months})` } }] },
+    };
+    if (f.start) props['วันที่'] = { date: { start: f.start } };
+    try {
+      const res = await fetch('/api/notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'POST', path: 'pages', data: { parent: { database_id: BUILTIN_CONFIG.incomeDb }, properties: props } })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.message || res.status); }
+      addNotionStatus(statuses, 'saved', `✅ บันทึก${e.label} (฿${amount.toLocaleString()}) เรียบร้อยแล้ว`);
+    } catch (err) {
+      addNotionStatus(statuses, 'error', `❌ บันทึก${e.label}ไม่สำเร็จ: ${err.message}`);
+    }
   }
 }
 
