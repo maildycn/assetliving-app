@@ -1668,7 +1668,10 @@ function filterContracts() {
 
   const rows = _allContracts.filter(c => {
     if (q && !c.tenant.toLowerCase().includes(q) && !c.property.toLowerCase().includes(q) && !(c.phone||'').includes(q)) return false;
-    if (sf && _contractStatusKey(c) !== sf) return false;
+    if (sf) return _contractStatusKey(c) === sf;
+    // มุมมองเริ่มต้น (ไม่เลือกสถานะ + ไม่ได้ค้นหา) ซ่อนสัญญาหมดอายุไปเลย กันห้องที่ต่อสัญญาใหม่แล้วมีทั้งสัญญาเก่า-ใหม่ปนกันให้งง
+    // แต่ถ้ากำลังค้นหาอยู่ (เช่น หาชื่อผู้เช่าคนเก่า) ยังให้เจอสัญญาหมดอายุด้วย ไม่งั้นจะดูเหมือนหาไม่เจอทั้งที่มีอยู่จริง
+    if (!q && _contractStatusKey(c) === 'expired') return false;
     return true;
   });
 
