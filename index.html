@@ -88,6 +88,12 @@
   .field input:focus { border-color: var(--accent); }
   .field input::placeholder { color: var(--text3); }
   .field-full { grid-column: 1 / -1; }
+  .asset-item-row input {
+    background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+    color: var(--text); font-family: 'Sarabun', sans-serif; font-size: 13px; padding: 8px 10px; outline: none; transition: border 0.2s;
+  }
+  .asset-item-row input:focus { border-color: var(--accent); }
+  .asset-item-row input::placeholder { color: var(--text3); }
 
   /* Upload */
   .upload-card {
@@ -702,6 +708,15 @@
         <img id="photo-preview-img" style="max-width:100%;max-height:220px;border-radius:var(--radius-sm);display:block;">
         <button class="btn btn-outline" style="margin-top:8px;" onclick="clearRoomPhoto()">ลบรูป</button>
       </div>
+
+      <div style="margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;">📺 รายการทรัพย์สินและอุปกรณ์ตกแต่ง (แนบท้ายสัญญา ผนวก ก.)</label>
+          <button type="button" class="btn-reload" onclick="addAssetItemRow()">+ เพิ่มรายการ</button>
+        </div>
+        <div id="asset-item-list"></div>
+        <div class="field field-full" style="margin-top:8px;"><label>อื่นๆ เพิ่มเติม (ไม่บังคับ)</label><input id="cf-asset-note" placeholder="เช่น ตามแสดงในรูปก่อนเข้าอยู่"></div>
+      </div>
     </div>
 
     <div class="upload-card">
@@ -873,6 +888,7 @@ function switchTab(name, el) {
   el.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'create' && !_roomPickerLoaded) loadRoomPicker();
+  if (name === 'create') renderDefaultAssetItems();
 }
 
 // ---- File Handling ----
@@ -1888,6 +1904,45 @@ function clearRoomPhoto() {
   document.getElementById('photo-preview').style.display = 'none';
 }
 
+// ---- Asset items (ผนวก ก. — รายการทรัพย์สินและอุปกรณ์ตกแต่ง) ----
+const DEFAULT_ASSET_ITEMS = [
+  { name: 'ทีวี', qty: '1' }, { name: 'ตู้เย็น', qty: '1' }, { name: 'เครื่องซักผ้า', qty: '1' },
+  { name: 'ไมโครเวฟ', qty: '1' }, { name: 'แอร์', qty: '2' }, { name: 'เครื่องทำน้ำอุ่น', qty: '1' },
+  { name: 'พัดลม', qty: '' }, { name: 'เตียง', qty: '1' }, { name: 'ที่นอน', qty: '1' },
+  { name: 'ชั้นวางทีวี', qty: '1' }, { name: 'ตู้เสื้อผ้า', qty: '1' }, { name: 'โซฟา', qty: '1' },
+  { name: 'คีย์การ์ด', qty: '' }, { name: 'กุญแจตู้จดหมาย', qty: '' }, { name: 'เก้าอี้', qty: '' },
+  { name: 'โต๊ะอาหาร', qty: '' }, { name: 'โต๊ะกลาง', qty: '' }, { name: 'เคาเตอร์ครัว', qty: '' },
+  { name: 'โต๊ะเครื่องแป้ง', qty: '' },
+];
+function assetItemRowHTML(name = '', qty = '') {
+  return `<div class="asset-item-row" style="display:flex;gap:6px;margin-bottom:5px;align-items:center;">
+    <input class="asset-item-name" placeholder="ชื่อรายการ" style="flex:1;" value="${escHtml(name)}">
+    <input class="asset-item-qty" placeholder="จำนวน" style="width:64px;" value="${escHtml(qty)}">
+    <button type="button" onclick="this.closest('.asset-item-row').remove()" title="ลบรายการ" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:4px;">×</button>
+  </div>`;
+}
+function addAssetItemRow(name = '', qty = '') {
+  const list = document.getElementById('asset-item-list');
+  if (list) list.insertAdjacentHTML('beforeend', assetItemRowHTML(name, qty));
+}
+function renderDefaultAssetItems() {
+  const list = document.getElementById('asset-item-list');
+  if (!list || list.children.length) return; // มีรายการอยู่แล้ว (เช่นตอนต่อสัญญา) ไม่เขียนทับ
+  DEFAULT_ASSET_ITEMS.forEach(it => addAssetItemRow(it.name, it.qty));
+}
+function gatherAssetItems() {
+  return Array.from(document.querySelectorAll('#asset-item-list .asset-item-row')).map(row => ({
+    name: row.querySelector('.asset-item-name').value.trim(),
+    qty:  row.querySelector('.asset-item-qty').value.trim(),
+  })).filter(it => it.name);
+}
+function applyAssetItems(items) {
+  const list = document.getElementById('asset-item-list');
+  if (!list) return;
+  list.innerHTML = '';
+  (items && items.length ? items : DEFAULT_ASSET_ITEMS).forEach(it => addAssetItemRow(it.name, it.qty));
+}
+
 // ---- Landlord profile (remembered across contracts — same person every time) ----
 function loadLandlordProfile() {
   try {
@@ -1969,7 +2024,7 @@ function gatherContractForm() {
     deposit: gn('cf-deposit'), depositReturn: gn('cf-deposit-return'),
     inspectNotice: gn('cf-inspect-notice'), breachFix: gn('cf-breach-fix'), moveOut: gn('cf-move-out'), terminateNotice: gn('cf-terminate-notice'),
     place: g('cf-place'), signDate: g('cf-sign-date'), witness1: g('cf-witness1'), witness2: g('cf-witness2'),
-    note: g('cf-note'),
+    note: g('cf-note'), assets: gatherAssetItems(), assetNote: g('cf-asset-note'),
   };
 }
 
@@ -1984,7 +2039,7 @@ const CF_FIELD_IDS = {
   deposit: 'cf-deposit', depositReturn: 'cf-deposit-return',
   inspectNotice: 'cf-inspect-notice', breachFix: 'cf-breach-fix', moveOut: 'cf-move-out', terminateNotice: 'cf-terminate-notice',
   place: 'cf-place', signDate: 'cf-sign-date', witness1: 'cf-witness1', witness2: 'cf-witness2',
-  note: 'cf-note',
+  note: 'cf-note', assetNote: 'cf-asset-note',
 };
 function applyContractForm(f) {
   for (const [key, id] of Object.entries(CF_FIELD_IDS)) {
@@ -1997,6 +2052,7 @@ function renewContract(idx) {
   const c = _allContracts[idx];
   if (!c) return;
   requestProtected('create', document.querySelectorAll('.tabs .tab-btn')[1]);
+  applyAssetItems(c.fullData ? c.fullData.assets : null);
 
   if (c.fullData) {
     applyContractForm(c.fullData);
@@ -2158,8 +2214,12 @@ function buildContractHTML(f, rows) {
     <div class="pc-title" style="font-size:16px;">ผนวก ก. บัญชีทรัพย์สินและอุปกรณ์ตกแต่งที่ให้เช่าพร้อมทรัพย์สินที่เช่า</div>
     <table class="pc-table">
       <thead><tr><th style="width:8%;">ลำดับ</th><th>รายการ</th><th style="width:12%;">จำนวน</th><th style="width:25%;">สภาพ/หมายเหตุ</th></tr></thead>
-      <tbody>${Array.from({ length: 12 }, (_, i) => `<tr><td>${i+1}</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join('')}</tbody>
+      <tbody>${Array.from({ length: Math.max((f.assets||[]).length, 12) }, (_, i) => {
+        const item = (f.assets||[])[i];
+        return `<tr><td>${i+1}</td><td>${item ? escHtml(item.name) : '&nbsp;'}</td><td>${item && item.qty ? escHtml(item.qty) : '&nbsp;'}</td><td>&nbsp;</td></tr>`;
+      }).join('')}</tbody>
     </table>
+    ${f.assetNote ? `<div class="pc-p" style="margin-top:8px;font-size:12px;">อื่นๆ เพิ่มเติม: ${escHtml(f.assetNote)}</div>` : ''}
     <div class="pc-p" style="margin-top:14px;">ผู้ให้เช่าและผู้เช่าได้ร่วมกันตรวจสอบสภาพทรัพย์สินและรายการดังกล่าวข้างต้นแล้ว ตรงตามความเป็นจริงทุกประการ ณ วันที่ส่งมอบทรัพย์สินที่เช่า</div>
     <div class="pc-sign-block">
       <div><div class="pc-sign-line"></div>ลงชื่อ .................................................. ผู้ให้เช่า</div>
