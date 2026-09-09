@@ -861,6 +861,7 @@ function closePwModal() {
 function init() {
   renderHistory();
   loadLandlordProfile();
+  loadBankProfile();
   const signDateEl = document.getElementById('cf-sign-date');
   if (signDateEl && !signDateEl.value) signDateEl.value = new Date().toISOString().slice(0, 10);
 }
@@ -1907,6 +1908,26 @@ function saveLandlordProfile() {
   }));
 }
 
+// ---- Bank account (จำไว้เหมือน landlord profile — บัญชีเดียวใช้กับทุกสัญญา ไม่ต้องกรอกซ้ำ) ----
+function loadBankProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem('la_bank_profile') || 'null');
+    if (!p) return;
+    document.getElementById('cf-pay-method').value        = p.payMethod || 'โอนเข้าบัญชีธนาคาร';
+    document.getElementById('cf-bank-account-name').value = p.bankAccountName || '';
+    document.getElementById('cf-bank-account-no').value   = p.bankAccountNo || '';
+    document.getElementById('cf-bank-name').value          = p.bankName || '';
+  } catch {}
+}
+function saveBankProfile() {
+  localStorage.setItem('la_bank_profile', JSON.stringify({
+    payMethod:       document.getElementById('cf-pay-method').value,
+    bankAccountName: document.getElementById('cf-bank-account-name').value.trim(),
+    bankAccountNo:   document.getElementById('cf-bank-account-no').value.trim(),
+    bankName:        document.getElementById('cf-bank-name').value.trim(),
+  }));
+}
+
 // ---- Room profile (remembered per room-no — building/floor/address/area ไม่ต้องกรอกซ้ำทุกครั้งที่ทำสัญญาห้องเดิม) ----
 function saveRoomProfile(f) {
   const roomNo = (f.roomNo || '').trim();
@@ -2165,6 +2186,7 @@ function printContract() {
     return;
   }
   saveLandlordProfile();
+  saveBankProfile();
   saveRoomProfile(f);
   const rows = computeRentSchedule(f.start, f.end, f.dueDay, f.rent);
   renderSchedulePreview();
@@ -2199,6 +2221,7 @@ async function saveContractToNotion() {
   const f = gatherContractForm();
   if (!f.tenantName) { alert('กรุณากรอกชื่อผู้เช่าก่อนบันทึก'); return; }
   saveLandlordProfile();
+  saveBankProfile();
   saveRoomProfile(f);
 
   const statuses = document.getElementById('create-notion-statuses');
