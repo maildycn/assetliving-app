@@ -685,7 +685,7 @@
           <label>เลือกห้องที่มีอยู่แล้ว (หรือเว้นว่างไว้แล้วกรอกห้องใหม่เองด้านล่าง)</label>
           <select id="cf-room-picker" onchange="applyRoomPick(this.value)"><option value="">＋ ห้องใหม่ / กรอกเอง</option></select>
         </div>
-        <div class="field"><label>บ้าน/ห้องชุดเลขที่</label><input id="cf-room-no" placeholder="เช่น 841"></div>
+        <div class="field"><label>บ้าน/ห้องชุดเลขที่</label><input id="cf-room-no" placeholder="เช่น 841" onchange="applyRoomProfile(this.value)"></div>
         <div class="field"><label>อาคาร/หมู่บ้าน</label><input id="cf-building"></div>
         <div class="field"><label>ชั้นที่</label><input id="cf-floor"></div>
         <div class="field"><label>ห้องเลขที่</label><input id="cf-room-code"></div>
@@ -742,6 +742,7 @@
         <div class="field"><label>วันที่ทำสัญญา</label><input id="cf-sign-date" type="date"></div>
         <div class="field"><label>พยานคนที่ 1 (ไม่บังคับ)</label><input id="cf-witness1"></div>
         <div class="field"><label>พยานคนที่ 2 (ไม่บังคับ)</label><input id="cf-witness2"></div>
+        <div class="field field-full"><label>หมายเหตุ (ไม่บังคับ)</label><input id="cf-note" placeholder="เช่น ต่อสัญญาจากฉบับเดิม, เอเจนต์ไม่ได้ดูแลต่อ"></div>
       </div>
     </div>
 
@@ -1482,6 +1483,7 @@ function applyRoomPick(val) {
   document.getElementById('cf-room-no').value = room.name;
   const rentEl = document.getElementById('cf-rent');
   if (room.rent && !rentEl.value) rentEl.value = room.rent;
+  applyRoomProfile(room.name);
 }
 
 async function fetchAssetCandidates(r, dbId) {
@@ -1683,6 +1685,7 @@ async function loadContracts() {
         end:      p.properties['วันหมดสัญญา']?.date?.start || null,
         phone:    p.properties['เบอร์โทรผู้เช่า']?.phone_number || null,
         status:   p.properties['สถานะสัญญา']?.select?.name || null,
+        note:     p.properties['หมายเหตุ']?.rich_text?.map(t => t.plain_text).join('') || null,
         fullData,
       };
     });
@@ -1746,6 +1749,7 @@ function filterContracts() {
         ${c.deposit ? `<span>🔒 มัดจำ ฿${c.deposit.toLocaleString()}</span>` : ''}
         ${c.phone   ? `<span>📞 ${c.phone}</span>` : ''}
         ${c.start   ? `<span>📅 ${c.start} → ${c.end||'ไม่ระบุ'}</span>` : ''}
+        ${c.note    ? `<span>📝 ${escHtml(c.note)}</span>` : ''}
       </div>
     </div>
   `).join('');
@@ -1903,6 +1907,34 @@ function saveLandlordProfile() {
   }));
 }
 
+// ---- Room profile (remembered per room-no — building/floor/address/area ไม่ต้องกรอกซ้ำทุกครั้งที่ทำสัญญาห้องเดิม) ----
+function saveRoomProfile(f) {
+  const roomNo = (f.roomNo || '').trim();
+  if (!roomNo) return;
+  try {
+    const all = JSON.parse(localStorage.getItem('la_room_profiles') || '{}');
+    all[roomNo] = { building: f.building, floor: f.floor, roomCode: f.roomCode, address: f.address, area: f.area };
+    localStorage.setItem('la_room_profiles', JSON.stringify(all));
+  } catch {}
+}
+function applyRoomProfile(roomNo) {
+  let profile;
+  try {
+    const all = JSON.parse(localStorage.getItem('la_room_profiles') || '{}');
+    profile = all[(roomNo || '').trim()];
+  } catch { return; }
+  if (!profile) return;
+  const setIfEmpty = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && !el.value && val) el.value = val;
+  };
+  setIfEmpty('cf-building', profile.building);
+  setIfEmpty('cf-floor', profile.floor);
+  setIfEmpty('cf-room-code', profile.roomCode);
+  setIfEmpty('cf-address', profile.address);
+  setIfEmpty('cf-area', profile.area);
+}
+
 function gatherContractForm() {
   const g  = id => document.getElementById(id).value.trim();
   const gn = id => +document.getElementById(id).value || 0;
@@ -1916,6 +1948,7 @@ function gatherContractForm() {
     deposit: gn('cf-deposit'), depositReturn: gn('cf-deposit-return'),
     inspectNotice: gn('cf-inspect-notice'), breachFix: gn('cf-breach-fix'), moveOut: gn('cf-move-out'), terminateNotice: gn('cf-terminate-notice'),
     place: g('cf-place'), signDate: g('cf-sign-date'), witness1: g('cf-witness1'), witness2: g('cf-witness2'),
+    note: g('cf-note'),
   };
 }
 
@@ -1930,6 +1963,7 @@ const CF_FIELD_IDS = {
   deposit: 'cf-deposit', depositReturn: 'cf-deposit-return',
   inspectNotice: 'cf-inspect-notice', breachFix: 'cf-breach-fix', moveOut: 'cf-move-out', terminateNotice: 'cf-terminate-notice',
   place: 'cf-place', signDate: 'cf-sign-date', witness1: 'cf-witness1', witness2: 'cf-witness2',
+  note: 'cf-note',
 };
 function applyContractForm(f) {
   for (const [key, id] of Object.entries(CF_FIELD_IDS)) {
@@ -1963,6 +1997,7 @@ function renewContract(idx) {
   document.getElementById('cf-start').value = newStart.toISOString().slice(0, 10);
   document.getElementById('cf-end').value = newEnd.toISOString().slice(0, 10);
   document.getElementById('cf-sign-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('cf-note').value = 'ต่อสัญญา';
 
   renderSchedulePreview();
   const statuses = document.getElementById('create-notion-statuses');
@@ -2130,24 +2165,28 @@ function printContract() {
     return;
   }
   saveLandlordProfile();
+  saveRoomProfile(f);
   const rows = computeRentSchedule(f.start, f.end, f.dueDay, f.rent);
   renderSchedulePreview();
   document.getElementById('print-contract').innerHTML = buildContractHTML(f, rows);
   setTimeout(() => window.print(), 100);
 }
 
-async function ensureRichTextProperty(dbId, propName) {
+async function ensureRichTextProperties(dbId, propNames) {
   const res = await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method: 'GET', path: `databases/${dbId}` })
   });
   const data = await res.json();
-  if (data.properties && data.properties[propName]) return;
+  const missing = propNames.filter(name => !(data.properties && data.properties[name]));
+  if (!missing.length) return;
+  const properties = {};
+  missing.forEach(name => { properties[name] = { rich_text: {} }; });
   await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'PATCH', path: `databases/${dbId}`, data: { properties: { [propName]: { rich_text: {} } } } })
+    body: JSON.stringify({ method: 'PATCH', path: `databases/${dbId}`, data: { properties } })
   });
 }
 function chunkText(str, size = 1900) {
@@ -2160,6 +2199,7 @@ async function saveContractToNotion() {
   const f = gatherContractForm();
   if (!f.tenantName) { alert('กรุณากรอกชื่อผู้เช่าก่อนบันทึก'); return; }
   saveLandlordProfile();
+  saveRoomProfile(f);
 
   const statuses = document.getElementById('create-notion-statuses');
   statuses.innerHTML = '';
@@ -2180,11 +2220,12 @@ async function saveContractToNotion() {
   if (f.start)       props['วันเริ่มสัญญา']       = { date: { start: f.start } };
   if (f.end)         props['วันหมดสัญญา']         = { date: { start: f.end } };
 
-  // เก็บฟอร์มฉบับเต็มเป็น JSON ไว้ในฟิลด์ซ่อน เพื่อให้ "ต่อสัญญา" ครั้งต่อไปดึงข้อมูลทั้งหมดกลับมาเติมได้เลย ไม่ต้องคีย์ใหม่
+  // เก็บฟอร์มฉบับเต็มเป็น JSON ไว้ในฟิลด์ซ่อน เพื่อให้ "ต่อสัญญา" ครั้งต่อไปดึงข้อมูลทั้งหมดกลับมาเติมได้เลย ไม่ต้องคีย์ใหม่ + ฟิลด์หมายเหตุ
   try {
-    await ensureRichTextProperty(BUILTIN_CONFIG.leaseDb, 'ข้อมูลฉบับเต็ม (JSON)');
+    await ensureRichTextProperties(BUILTIN_CONFIG.leaseDb, ['ข้อมูลฉบับเต็ม (JSON)', 'หมายเหตุ']);
     props['ข้อมูลฉบับเต็ม (JSON)'] = { rich_text: chunkText(JSON.stringify(f)).map(t => ({ text: { content: t } })) };
-  } catch { /* ไม่บล็อกการบันทึกหลัก ถ้าเพิ่ม property นี้ไม่สำเร็จ */ }
+    if (f.note) props['หมายเหตุ'] = { rich_text: [{ text: { content: f.note } }] };
+  } catch { /* ไม่บล็อกการบันทึกหลัก ถ้าเพิ่ม property เหล่านี้ไม่สำเร็จ */ }
 
   if (_roomPhotoFile) {
     try {
