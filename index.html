@@ -555,6 +555,10 @@
         <div class="upload-sub">รองรับ PDF, JPG, PNG, Word · อัปโหลดหลายไฟล์พร้อมกันได้</div>
       </div>
       <div class="file-list" id="file-list"></div>
+      <label id="multi-page-toggle" style="display:none;align-items:center;gap:8px;margin:10px 0;font-size:13px;color:var(--text2);cursor:pointer;">
+        <input type="checkbox" id="cf-multi-page" style="width:16px;height:16px;">
+        ไฟล์เหล่านี้เป็นหน้าต่างๆ ของสัญญาฉบับเดียวกัน (รวมอ่านเป็น 1 รายการ ไม่แยกเป็นหลายสัญญา)
+      </label>
       <button class="btn btn-primary" id="btn-analyze" disabled onclick="analyzeAll()">
         ✦ ให้ AI อ่านสัญญา
       </button>
@@ -926,6 +930,7 @@ function handleFiles(fileList) {
   files = [...files, ...Array.from(fileList)];
   renderFileList();
   document.getElementById('btn-analyze').disabled = files.length === 0;
+  document.getElementById('multi-page-toggle').style.display = files.length > 1 ? 'flex' : 'none';
 }
 
 function renderFileList() {
@@ -944,6 +949,7 @@ function removeFile(i) {
   files.splice(i, 1);
   renderFileList();
   document.getElementById('btn-analyze').disabled = files.length === 0;
+  document.getElementById('multi-page-toggle').style.display = files.length > 1 ? 'flex' : 'none';
 }
 
 function getFileIcon(name) {
@@ -965,8 +971,11 @@ async function analyzeAll() {
   document.getElementById('result-card').classList.remove('show');
   document.getElementById('batch-summary').classList.remove('show');
 
+  const isMultiPage = files.length > 1 && document.getElementById('cf-multi-page')?.checked;
   if (files.length === 1) {
     await analyzeSingle(files[0]);
+  } else if (isMultiPage) {
+    await analyzeMultiPage(files);
   } else {
     await analyzeBatch(files);
   }
@@ -987,7 +996,7 @@ async function analyzeSingle(file) {
     const mime = getMime(file);
     updateStep('p1', 'done'); updateStep('p2', 'active');
 
-    const result = await callClaude(b64, mime, file.name);
+    const result = await callClaude([{ b64, mime }]);
     updateStep('p2', 'done'); updateStep('p3', 'active');
 
     currentResult = result;
@@ -1021,7 +1030,7 @@ async function analyzeBatch(fileList) {
     try {
       const b64  = await toBase64(f);
       const mime = getMime(f);
-      const r = await callClaude(b64, mime, f.name);
+      const r = await callClaude([{ b64, mime }]);
       r._fileName = f.name;
       r._file = f;
       results.push({ file: f.name, result: r, ok: true });
@@ -1032,6 +1041,45 @@ async function analyzeBatch(fileList) {
 
   prog.classList.remove('show');
   renderBatchResults(results);
+}
+
+// ไฟล์หลายไฟล์ที่เป็นหน้าต่างๆ ของสัญญาฉบับเดียวกัน (ถ่ายรูปทีละหน้า) — ส่งรวมให้ AI อ่านครั้งเดียว ได้ผลลัพธ์เดียว
+// ไม่ใช้ analyzeBatch เพราะแต่ละหน้าเดี่ยวๆ มักมีข้อมูลไม่ครบ (เช่น หน้าเซ็นชื่ออย่างเดียว) ทำให้ถูกบันทึกเป็นสัญญาแยกที่ข้อมูลว่างๆ ซ้ำกันหลายรายการ
+async function analyzeMultiPage(fileList) {
+  const prog = document.getElementById('progress-card');
+  prog.classList.add('show');
+  setProgress([
+    { id:'p1', label:`กำลังอ่านไฟล์ทั้งหมด ${fileList.length} หน้า...`, status:'active' },
+    { id:'p2', label:'AI วิเคราะห์เนื้อหา...', status:'wait' },
+    { id:'p3', label:'ดึงข้อมูลสำคัญ...', status:'wait' },
+    { id:'p4', label:'เตรียมบันทึก Notion...', status:'wait' },
+  ]);
+
+  try {
+    const parts = [];
+    for (const f of fileList) parts.push({ b64: await toBase64(f), mime: getMime(f) });
+    updateStep('p1', 'done'); updateStep('p2', 'active');
+
+    const result = await callClaude(parts);
+    updateStep('p2', 'done'); updateStep('p3', 'active');
+
+    const label = `${fileList.length} หน้า (${fileList[0].name} ฯลฯ)`;
+    currentResult = result;
+    currentResult._fileName = label;
+    currentResult._file = fileList[0];
+
+    updateStep('p3', 'done'); updateStep('p4', 'active');
+    setTimeout(() => {
+      updateStep('p4', 'done');
+      prog.classList.remove('show');
+      showResult(result, label);
+    }, 600);
+
+  } catch(err) {
+    prog.classList.remove('show');
+    alert('เกิดข้อผิดพลาด: ' + err.message);
+    document.getElementById('btn-analyze').disabled = false;
+  }
 }
 
 function renderBatchResults(results) {
@@ -1058,8 +1106,14 @@ function renderBatchResults(results) {
 }
 
 async function saveBatch(results) {
-  let saved = 0, skippedExpired = 0, skippedDup = 0;
+  let saved = 0, skippedExpired = 0, skippedDup = 0, skippedEmpty = 0;
   for (const r of results) {
+    // ข้ามรายการที่อ่านไม่ได้ข้อมูลพอจะระบุตัวสัญญา (เช่น หน้าที่มีแค่ลายเซ็นหรือเงื่อนไข ไม่มีชื่อผู้เช่า)
+    // กันไม่ให้ไฟล์หลายหน้าของสัญญาฉบับเดียวกันถูกบันทึกเป็นรายการ "ไม่ระบุ" ว่างๆ ซ้ำกันหลายรายการใน Notion
+    if (!r.tenant_name) {
+      skippedEmpty++;
+      continue;
+    }
     // ข้ามสัญญาหมดอายุ
     if (isExpired(r)) {
       skippedExpired++;
@@ -1088,12 +1142,13 @@ async function saveBatch(results) {
   const parts = [`บันทึกสำเร็จ ${saved} รายการ`];
   if (skippedExpired) parts.push(`ข้ามหมดอายุ ${skippedExpired} รายการ`);
   if (skippedDup)     parts.push(`ข้ามซ้ำ ${skippedDup} รายการ`);
+  if (skippedEmpty)   parts.push(`ข้ามที่อ่านข้อมูลไม่พอ ${skippedEmpty} รายการ`);
   alert(parts.join(' · '));
   renderHistory();
 }
 
 // ---- Claude API ----
-async function callClaude(b64, mime, fileName) {
+async function callClaude(parts) {
   const prompt = `คุณเป็น AI ผู้เชี่ยวชาญด้านการอ่านและวิเคราะห์สัญญาเช่าอสังหาริมทรัพย์ไทย มีความแม่นยำสูงมาก
 
 ## ขั้นตอนการอ่าน (ทำตามลำดับ)
@@ -1132,12 +1187,14 @@ async function callClaude(b64, mime, fileName) {
 หากไม่พบข้อมูลใดในเอกสาร ให้ใส่ null — ห้ามเดาหรือสร้างข้อมูลขึ้นมาเอง`;
 
   const content = [];
-  if (mime.startsWith('image/')) {
-    content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } });
-  } else {
-    content.push({ type: 'document', source: { type: 'base64', media_type: mime, data: b64 } });
+  for (const { b64, mime } of parts) {
+    if (mime.startsWith('image/')) {
+      content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } });
+    } else {
+      content.push({ type: 'document', source: { type: 'base64', media_type: mime, data: b64 } });
+    }
   }
-  content.push({ type: 'text', text: prompt });
+  content.push({ type: 'text', text: prompt + (parts.length > 1 ? '\n\nหมายเหตุ: ไฟล์ที่แนบมาทั้งหมดนี้คือหน้าต่างๆ ของสัญญาฉบับเดียวกัน ให้รวมข้อมูลจากทุกหน้าเป็นผลลัพธ์ JSON ชุดเดียว ไม่ต้องแยกเป็นหลายสัญญา' : '') });
 
   const body = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8192, messages: [{ role: 'user', content }] });
 
