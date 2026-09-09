@@ -408,6 +408,12 @@
   .btn-reload:hover { border-color: var(--accent); color: var(--accent2); }
   .cal-link { font-size: 14px; text-decoration: none; opacity: 0.5; transition: opacity 0.15s; flex-shrink: 0; line-height: 1; }
   .cal-link:hover { opacity: 1; }
+  .btn-renew {
+    background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); color: var(--accent2);
+    border-radius: var(--radius-sm); padding: 3px 10px; font-size: 11px; cursor: pointer;
+    font-family: Sarabun, sans-serif; flex-shrink: 0; white-space: nowrap;
+  }
+  .btn-renew:hover { background: rgba(99,102,241,0.18); }
 
   /* Asset room picker */
   .asset-picker {
@@ -675,6 +681,10 @@
     <div class="upload-card">
       <h3>🏠 ทรัพย์สินที่เช่า</h3>
       <div class="settings-card">
+        <div class="field field-full">
+          <label>เลือกห้องที่มีอยู่แล้ว (หรือเว้นว่างไว้แล้วกรอกห้องใหม่เองด้านล่าง)</label>
+          <select id="cf-room-picker" onchange="applyRoomPick(this.value)"><option value="">＋ ห้องใหม่ / กรอกเอง</option></select>
+        </div>
         <div class="field"><label>บ้าน/ห้องชุดเลขที่</label><input id="cf-room-no" placeholder="เช่น 841"></div>
         <div class="field"><label>อาคาร/หมู่บ้าน</label><input id="cf-building"></div>
         <div class="field"><label>ชั้นที่</label><input id="cf-floor"></div>
@@ -860,6 +870,7 @@ function switchTab(name, el) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'create' && !_roomPickerLoaded) loadRoomPicker();
 }
 
 // ---- File Handling ----
@@ -1445,6 +1456,34 @@ function getAssetPageMeta(p) {
   return { name: getPageTitleText(p) || '(ไม่มีชื่อ)', rent };
 }
 
+let _roomPickerLoaded = false;
+let _assetRoomsCache = [];
+async function loadRoomPicker() {
+  const sel = document.getElementById('cf-room-picker');
+  if (!sel) return;
+  _roomPickerLoaded = true;
+  try {
+    const pages = await fetchAllAssetPages(BUILTIN_CONFIG.assetDb);
+    _assetRoomsCache = pages.map(getAssetPageMeta).filter(r => r.name && r.name !== '(ไม่มีชื่อ)');
+    _assetRoomsCache.forEach((r, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = r.rent ? `${r.name} (฿${r.rent.toLocaleString()}/เดือน)` : r.name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('โหลดรายชื่อห้องจาก AssetLiving ไม่สำเร็จ', e);
+  }
+}
+function applyRoomPick(val) {
+  if (val === '') return;
+  const room = _assetRoomsCache[+val];
+  if (!room) return;
+  document.getElementById('cf-room-no').value = room.name;
+  const rentEl = document.getElementById('cf-rent');
+  if (room.rent && !rentEl.value) rentEl.value = room.rent;
+}
+
 async function fetchAssetCandidates(r, dbId) {
   const pages = await fetchAllAssetPages(dbId);
   if (!pages.length) return [];
@@ -1628,16 +1667,25 @@ async function loadContracts() {
       cursor = data.has_more ? data.next_cursor : null;
     } while (cursor);
 
-    _allContracts = pages.map(p => ({
-      tenant:   getPageTitleText(p) || '—',
-      property: p.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '—',
-      rent:     p.properties['ค่าเช่า (บาท/เดือน)']?.number ?? null,
-      deposit:  p.properties['เงินมัดจำ (บาท)']?.number ?? null,
-      start:    p.properties['วันเริ่มสัญญา']?.date?.start || null,
-      end:      p.properties['วันหมดสัญญา']?.date?.start || null,
-      phone:    p.properties['เบอร์โทรผู้เช่า']?.phone_number || null,
-      status:   p.properties['สถานะสัญญา']?.select?.name || null,
-    }));
+    _allContracts = pages.map(p => {
+      let fullData = null;
+      const jsonProp = p.properties['ข้อมูลฉบับเต็ม (JSON)']?.rich_text;
+      if (jsonProp && jsonProp.length) {
+        try { fullData = JSON.parse(jsonProp.map(t => t.plain_text).join('')); } catch { /* ข้อมูลเสียหาย ข้ามไป ใช้ fallback แทน */ }
+      }
+      return {
+        id:       p.id,
+        tenant:   getPageTitleText(p) || '—',
+        property: p.properties['ทรัพย์สิน / ห้อง']?.rich_text?.[0]?.plain_text || '—',
+        rent:     p.properties['ค่าเช่า (บาท/เดือน)']?.number ?? null,
+        deposit:  p.properties['เงินมัดจำ (บาท)']?.number ?? null,
+        start:    p.properties['วันเริ่มสัญญา']?.date?.start || null,
+        end:      p.properties['วันหมดสัญญา']?.date?.start || null,
+        phone:    p.properties['เบอร์โทรผู้เช่า']?.phone_number || null,
+        status:   p.properties['สถานะสัญญา']?.select?.name || null,
+        fullData,
+      };
+    });
     filterContracts();
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>โหลดไม่สำเร็จ: ${e.message}</div></div>`;
@@ -1690,6 +1738,7 @@ function filterContracts() {
         <span class="contract-tenant">${c.tenant}</span>
         <span class="contract-status ${_contractStatusClass(c)}">${_contractStatusLabel(c)}</span>
         ${c.end ? `<a href="${contractCalUrl(c)}" target="_blank" rel="noopener" class="cal-link" title="เพิ่มใน Google Calendar">📅</a>` : ''}
+        <button class="btn-renew" onclick="renewContract(${_allContracts.indexOf(c)})" title="สร้างสัญญาฉบับใหม่โดยดึงข้อมูลห้อง/ผู้เช่าเดิมมาเติมให้">🔁 ต่อสัญญา</button>
       </div>
       <div class="contract-meta">
         <span>🏠 ${c.property}</span>
@@ -1870,6 +1919,58 @@ function gatherContractForm() {
   };
 }
 
+// ---- Contract renewal (ต่อสัญญา) — reverse of gatherContractForm's key -> element id mapping ----
+const CF_FIELD_IDS = {
+  landlordName: 'cf-landlord-name', landlordAge: 'cf-landlord-age', landlordAddress: 'cf-landlord-address', landlordIdCard: 'cf-landlord-idcard',
+  tenantName: 'cf-tenant-name', tenantAge: 'cf-tenant-age', tenantAddress: 'cf-tenant-address', tenantIdCard: 'cf-tenant-idcard', tenantPhone: 'cf-tenant-phone', tenantEmail: 'cf-tenant-email',
+  roomNo: 'cf-room-no', building: 'cf-building', floor: 'cf-floor', roomCode: 'cf-room-code', address: 'cf-address', area: 'cf-area',
+  start: 'cf-start', end: 'cf-end', renewNotice: 'cf-renew-notice',
+  rent: 'cf-rent', dueDay: 'cf-due-day', lateFee: 'cf-late-fee', overdueMonths: 'cf-overdue-months',
+  payMethod: 'cf-pay-method', bankAccountName: 'cf-bank-account-name', bankAccountNo: 'cf-bank-account-no', bankName: 'cf-bank-name',
+  deposit: 'cf-deposit', depositReturn: 'cf-deposit-return',
+  inspectNotice: 'cf-inspect-notice', breachFix: 'cf-breach-fix', moveOut: 'cf-move-out', terminateNotice: 'cf-terminate-notice',
+  place: 'cf-place', signDate: 'cf-sign-date', witness1: 'cf-witness1', witness2: 'cf-witness2',
+};
+function applyContractForm(f) {
+  for (const [key, id] of Object.entries(CF_FIELD_IDS)) {
+    const el = document.getElementById(id);
+    if (el && f[key] !== undefined && f[key] !== null && f[key] !== '') el.value = f[key];
+  }
+}
+
+function renewContract(idx) {
+  const c = _allContracts[idx];
+  if (!c) return;
+  requestProtected('create', document.querySelectorAll('.tabs .tab-btn')[1]);
+
+  if (c.fullData) {
+    applyContractForm(c.fullData);
+  } else {
+    // สัญญาเก่าที่สร้างก่อนมีฟีเจอร์นี้ ไม่มี JSON ฉบับเต็ม — เติมเท่าที่มีข้อมูลใน Notion
+    document.getElementById('cf-tenant-name').value = c.tenant !== '—' ? c.tenant : '';
+    document.getElementById('cf-tenant-phone').value = c.phone || '';
+    document.getElementById('cf-room-no').value = c.property !== '—' ? c.property : '';
+    document.getElementById('cf-rent').value = c.rent || '';
+    document.getElementById('cf-deposit').value = c.deposit || '';
+  }
+
+  // ต่อสัญญา: เริ่มวันถัดจากวันหมดสัญญาเดิม 1 วัน ครบกำหนดอีก 1 ปีถัดไป
+  const oldEnd = c.end ? new Date(c.end + 'T00:00:00') : new Date();
+  const newStart = new Date(oldEnd);
+  newStart.setDate(newStart.getDate() + 1);
+  const newEnd = new Date(newStart);
+  newEnd.setFullYear(newEnd.getFullYear() + 1);
+  document.getElementById('cf-start').value = newStart.toISOString().slice(0, 10);
+  document.getElementById('cf-end').value = newEnd.toISOString().slice(0, 10);
+  document.getElementById('cf-sign-date').value = new Date().toISOString().slice(0, 10);
+
+  renderSchedulePreview();
+  const statuses = document.getElementById('create-notion-statuses');
+  statuses.innerHTML = '';
+  addNotionStatus(statuses, 'saved', `🔁 ดึงข้อมูลจากสัญญาเดิมของ "${c.tenant}" มาเติมให้แล้ว ตรวจสอบวันที่/รายละเอียดก่อนพิมพ์หรือบันทึก`);
+  document.getElementById('tab-create').scrollIntoView({ behavior: 'smooth' });
+}
+
 function renderSchedulePreview() {
   const f = gatherContractForm();
   const rows = computeRentSchedule(f.start, f.end, f.dueDay, f.rent);
@@ -2035,6 +2136,26 @@ function printContract() {
   setTimeout(() => window.print(), 100);
 }
 
+async function ensureRichTextProperty(dbId, propName) {
+  const res = await fetch('/api/notion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method: 'GET', path: `databases/${dbId}` })
+  });
+  const data = await res.json();
+  if (data.properties && data.properties[propName]) return;
+  await fetch('/api/notion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method: 'PATCH', path: `databases/${dbId}`, data: { properties: { [propName]: { rich_text: {} } } } })
+  });
+}
+function chunkText(str, size = 1900) {
+  const chunks = [];
+  for (let i = 0; i < str.length; i += size) chunks.push(str.slice(i, i + size));
+  return chunks;
+}
+
 async function saveContractToNotion() {
   const f = gatherContractForm();
   if (!f.tenantName) { alert('กรุณากรอกชื่อผู้เช่าก่อนบันทึก'); return; }
@@ -2058,6 +2179,12 @@ async function saveContractToNotion() {
   if (f.tenantEmail) props['อีเมลผู้เช่า']        = { email: f.tenantEmail };
   if (f.start)       props['วันเริ่มสัญญา']       = { date: { start: f.start } };
   if (f.end)         props['วันหมดสัญญา']         = { date: { start: f.end } };
+
+  // เก็บฟอร์มฉบับเต็มเป็น JSON ไว้ในฟิลด์ซ่อน เพื่อให้ "ต่อสัญญา" ครั้งต่อไปดึงข้อมูลทั้งหมดกลับมาเติมได้เลย ไม่ต้องคีย์ใหม่
+  try {
+    await ensureRichTextProperty(BUILTIN_CONFIG.leaseDb, 'ข้อมูลฉบับเต็ม (JSON)');
+    props['ข้อมูลฉบับเต็ม (JSON)'] = { rich_text: chunkText(JSON.stringify(f)).map(t => ({ text: { content: t } })) };
+  } catch { /* ไม่บล็อกการบันทึกหลัก ถ้าเพิ่ม property นี้ไม่สำเร็จ */ }
 
   if (_roomPhotoFile) {
     try {
