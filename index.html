@@ -1803,7 +1803,7 @@ function computeRentSchedule(startStr, endStr, dueDay, rent) {
 
   const rows = [];
   let no = 1;
-  while (cursor <= end) {
+  while (cursor < end) {
     rows.push({ no, monthLabel: thaiMonthYearLabel(cursor), dueLabel: thaiDateLabel(cursor), amount: rent || 0 });
     no++;
     cursor = dueDateInMonth(cursor.getFullYear(), cursor.getMonth() + 1, dueDay);
