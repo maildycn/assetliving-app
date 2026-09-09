@@ -685,6 +685,36 @@
     </div>
 
     <div class="upload-card">
+      <h3>🪪 แนบสำเนาบัตรประชาชน (ไม่บังคับ)</h3>
+      <div class="settings-card">
+        <div class="field">
+          <label>บัตรประชาชนผู้ให้เช่า</label>
+          <div class="upload-zone" id="id-photo-drop-landlord" style="padding:16px 12px;">
+            <input type="file" id="cf-id-photo-input-landlord" accept="image/*" onchange="handleIdPhoto(this.files,'landlord')">
+            <div class="upload-icon" style="font-size:22px;margin-bottom:4px;">🪪</div>
+            <div class="upload-text" style="font-size:12px;">แนบรูป/สแกนบัตร</div>
+          </div>
+          <div id="id-photo-preview-landlord" style="display:none;margin-top:8px;">
+            <img id="id-photo-preview-img-landlord" style="max-width:100%;max-height:130px;border-radius:var(--radius-sm);display:block;">
+            <button class="btn btn-outline" style="margin-top:6px;font-size:12px;padding:6px 10px;" onclick="clearIdPhoto('landlord')">ลบรูป</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>บัตรประชาชนผู้เช่า</label>
+          <div class="upload-zone" id="id-photo-drop-tenant" style="padding:16px 12px;">
+            <input type="file" id="cf-id-photo-input-tenant" accept="image/*" onchange="handleIdPhoto(this.files,'tenant')">
+            <div class="upload-icon" style="font-size:22px;margin-bottom:4px;">🪪</div>
+            <div class="upload-text" style="font-size:12px;">แนบรูป/สแกนบัตร</div>
+          </div>
+          <div id="id-photo-preview-tenant" style="display:none;margin-top:8px;">
+            <img id="id-photo-preview-img-tenant" style="max-width:100%;max-height:130px;border-radius:var(--radius-sm);display:block;">
+            <button class="btn btn-outline" style="margin-top:6px;font-size:12px;padding:6px 10px;" onclick="clearIdPhoto('tenant')">ลบรูป</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="upload-card">
       <h3>🏠 ทรัพย์สินที่เช่า</h3>
       <div class="settings-card">
         <div class="field field-full">
@@ -1904,6 +1934,26 @@ function clearRoomPhoto() {
   document.getElementById('photo-preview').style.display = 'none';
 }
 
+// ---- ID card attachments (บัตรประชาชนผู้ให้เช่า/ผู้เช่า) ----
+let _idPhotos = { landlord: { file: null, dataUrl: '' }, tenant: { file: null, dataUrl: '' } };
+function handleIdPhoto(fileList, which) {
+  const file = fileList[0];
+  if (!file) return;
+  _idPhotos[which].file = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _idPhotos[which].dataUrl = e.target.result;
+    document.getElementById(`id-photo-preview-img-${which}`).src = e.target.result;
+    document.getElementById(`id-photo-preview-${which}`).style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+function clearIdPhoto(which) {
+  _idPhotos[which] = { file: null, dataUrl: '' };
+  document.getElementById(`cf-id-photo-input-${which}`).value = '';
+  document.getElementById(`id-photo-preview-${which}`).style.display = 'none';
+}
+
 // ---- Asset items (ผนวก ก. — รายการทรัพย์สินและอุปกรณ์ตกแต่ง) ----
 const DEFAULT_ASSET_ITEMS = [
   { name: 'ทีวี', qty: '1' }, { name: 'ตู้เย็น', qty: '1' }, { name: 'เครื่องซักผ้า', qty: '1' },
@@ -2124,6 +2174,14 @@ function buildContractHTML(f, rows) {
     <div class="pc-p">สัญญาฉบับนี้ทำขึ้นระหว่าง นาย/นาง/นางสาว ${blank(f.landlordName)} อายุ ${blank(f.landlordAge)} ปี อยู่บ้านเลขที่ ${blank(f.landlordAddress)} ถือบัตรประจำตัวประชาชนเลขที่ ${blank(f.landlordIdCard)} ซึ่งต่อไปในสัญญานี้เรียกว่า "ผู้ให้เช่า" ฝ่ายหนึ่ง</div>
     <div class="pc-p">กับ นาย/นาง/นางสาว ${blank(f.tenantName)} อายุ ${blank(f.tenantAge)} ปี อยู่บ้านเลขที่ ${blank(f.tenantAddress)} ถือบัตรประจำตัวประชาชนเลขที่ ${blank(f.tenantIdCard)} ซึ่งต่อไปในสัญญานี้เรียกว่า "ผู้เช่า" อีกฝ่ายหนึ่ง</div>
     <div class="pc-p">คู่สัญญาทั้งสองฝ่ายตกลงทำสัญญาเช่ากันไว้ โดยมีข้อความและเงื่อนไขดังต่อไปนี้</div>
+    ${(_idPhotos.landlord.dataUrl || _idPhotos.tenant.dataUrl) ? `
+    <table class="pc-table" style="table-layout:fixed;margin-top:10px;">
+      <thead><tr><th>บัตรประชาชนผู้ให้เช่า</th><th>บัตรประชาชนผู้เช่า</th></tr></thead>
+      <tbody><tr>
+        <td style="text-align:center;padding:10px;">${_idPhotos.landlord.dataUrl ? `<img src="${_idPhotos.landlord.dataUrl}" style="max-width:100%;max-height:160px;border-radius:4px;">` : '&nbsp;'}</td>
+        <td style="text-align:center;padding:10px;">${_idPhotos.tenant.dataUrl ? `<img src="${_idPhotos.tenant.dataUrl}" style="max-width:100%;max-height:160px;border-radius:4px;">` : '&nbsp;'}</td>
+      </tr></tbody>
+    </table>` : ''}
 
     <div class="pc-clause-title">ข้อ 1. ทรัพย์สินที่เช่า</div>
     <div class="pc-p">ผู้ให้เช่าตกลงให้เช่า และผู้เช่าตกลงเช่า บ้าน/ห้องชุด เลขที่ ${blank(f.roomNo)} อาคาร/หมู่บ้าน ${blank(f.building)} ชั้นที่ ${blank(f.floor)} ห้องเลขที่ ${blank(f.roomCode)}</div>
@@ -2254,21 +2312,22 @@ function printContract() {
   setTimeout(() => window.print(), 100);
 }
 
-async function ensureRichTextProperties(dbId, propNames) {
+async function ensureProperties(dbId, propsConfig) {
   const res = await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method: 'GET', path: `databases/${dbId}` })
   });
   const data = await res.json();
-  const missing = propNames.filter(name => !(data.properties && data.properties[name]));
-  if (!missing.length) return;
-  const properties = {};
-  missing.forEach(name => { properties[name] = { rich_text: {} }; });
+  const missing = {};
+  for (const [name, cfg] of Object.entries(propsConfig)) {
+    if (!(data.properties && data.properties[name])) missing[name] = cfg;
+  }
+  if (!Object.keys(missing).length) return;
   await fetch('/api/notion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'PATCH', path: `databases/${dbId}`, data: { properties } })
+    body: JSON.stringify({ method: 'PATCH', path: `databases/${dbId}`, data: { properties: missing } })
   });
 }
 function chunkText(str, size = 1900) {
@@ -2305,7 +2364,7 @@ async function saveContractToNotion() {
 
   // เก็บฟอร์มฉบับเต็มเป็น JSON ไว้ในฟิลด์ซ่อน เพื่อให้ "ต่อสัญญา" ครั้งต่อไปดึงข้อมูลทั้งหมดกลับมาเติมได้เลย ไม่ต้องคีย์ใหม่ + ฟิลด์หมายเหตุ
   try {
-    await ensureRichTextProperties(BUILTIN_CONFIG.leaseDb, ['ข้อมูลฉบับเต็ม (JSON)', 'หมายเหตุ']);
+    await ensureProperties(BUILTIN_CONFIG.leaseDb, { 'ข้อมูลฉบับเต็ม (JSON)': { rich_text: {} }, 'หมายเหตุ': { rich_text: {} } });
     props['ข้อมูลฉบับเต็ม (JSON)'] = { rich_text: chunkText(JSON.stringify(f)).map(t => ({ text: { content: t } })) };
     if (f.note) props['หมายเหตุ'] = { rich_text: [{ text: { content: f.note } }] };
   } catch { /* ไม่บล็อกการบันทึกหลัก ถ้าเพิ่ม property เหล่านี้ไม่สำเร็จ */ }
@@ -2315,6 +2374,23 @@ async function saveContractToNotion() {
       const fileUrl = await uploadFile(_roomPhotoFile);
       props['ต้นฉบับสัญญา'] = { files: [{ name: _roomPhotoFile.name, type: 'external', external: { url: fileUrl } }] };
     } catch { /* บันทึกข้อมูลโดยไม่มีรูปถ้าอัปโหลดไม่สำเร็จ */ }
+  }
+
+  if (_idPhotos.landlord.file || _idPhotos.tenant.file) {
+    try {
+      await ensureProperties(BUILTIN_CONFIG.leaseDb, {
+        'สำเนาบัตรประชาชนผู้ให้เช่า': { files: {} },
+        'สำเนาบัตรประชาชนผู้เช่า':   { files: {} },
+      });
+      if (_idPhotos.landlord.file) {
+        const url = await uploadFile(_idPhotos.landlord.file);
+        props['สำเนาบัตรประชาชนผู้ให้เช่า'] = { files: [{ name: _idPhotos.landlord.file.name, type: 'external', external: { url } }] };
+      }
+      if (_idPhotos.tenant.file) {
+        const url = await uploadFile(_idPhotos.tenant.file);
+        props['สำเนาบัตรประชาชนผู้เช่า'] = { files: [{ name: _idPhotos.tenant.file.name, type: 'external', external: { url } }] };
+      }
+    } catch { /* บันทึกข้อมูลโดยไม่มีสำเนาบัตรถ้าอัปโหลดไม่สำเร็จ */ }
   }
 
   try {
