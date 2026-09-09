@@ -923,6 +923,7 @@ function switchTab(name, el) {
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'create' && !_roomPickerLoaded) loadRoomPicker();
   if (name === 'create') renderDefaultAssetItems();
+  if (name === 'create') _isRenewalFlow = false; // reset ทุกครั้งที่เปิดแท็บนี้ — renewContract() จะตั้งเป็น true อีกทีหลังเรียกฟังก์ชันนี้ ถ้าเป็นการต่อสัญญาจริง
 }
 
 // ---- File Handling ----
@@ -2169,10 +2170,12 @@ function applyContractForm(f) {
   }
 }
 
+let _isRenewalFlow = false;
 function renewContract(idx) {
   const c = _allContracts[idx];
   if (!c) return;
   requestProtected('create', document.querySelectorAll('.tabs .tab-btn')[1]);
+  _isRenewalFlow = true; // ต่อสัญญาไม่มีการวางเงินประกัน/ค่าเช่าล่วงหน้าใหม่ตามปกติ — กันไม่ให้บันทึกรายรับหลอกซ้ำตอนบันทึกสัญญา
   applyAssetItems(c.fullData ? c.fullData.assets : null);
 
   if (c.fullData) {
@@ -2472,7 +2475,13 @@ async function saveContractToNotion() {
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.message || res.status); }
     addNotionStatus(statuses, 'saved', '✅ บันทึกลง LeaseAI — สัญญาเช่า เรียบร้อยแล้ว');
-    await saveInitialPaymentsToNotion(f, property, statuses);
+    // ต่อสัญญาไม่มีการวางเงินประกัน/ค่าเช่าล่วงหน้าใหม่แบบสัญญาแรก (มัดจำเดิมยกมา ค่าเช่าจ่ายผ่านช่องทางปกติ) — ข้ามการบันทึกรายรับหลอกอัตโนมัติ
+    if (_isRenewalFlow) {
+      addNotionStatus(statuses, 'saved', 'ℹ️ เป็นการต่อสัญญา — ข้ามบันทึกเงินประกัน/ค่าเช่าล่วงหน้าอัตโนมัติ (ถ้ามีเก็บเพิ่มจริง บันทึกเองใน Income DB ได้)');
+      _isRenewalFlow = false;
+    } else {
+      await saveInitialPaymentsToNotion(f, property, statuses);
+    }
   } catch (e) {
     addNotionStatus(statuses, 'error', '❌ บันทึกไม่สำเร็จ: ' + e.message);
   }
