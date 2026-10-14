@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetLiving · การจอง</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c12;
+    --surface: #13161f;
+    --surface2: #1c2030;
+    --border: rgba(255,255,255,0.06);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --text: #f1f5f9;
+    --text2: #94a3b8;
+    --text3: #475569;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Sarabun', sans-serif;
+    min-height: 100vh;
+    padding: 24px 16px 40px;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 24px; position: relative; }
+  .header-logo {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 99px; padding: 8px 20px; margin-bottom: 16px;
+  }
+  .header-logo span { font-size: 18px; }
+  .header-logo p { font-size: 13px; font-weight: 500; color: var(--accent2); }
+  .header h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; display: inline-flex; align-items: center; gap: 10px; justify-content: center; }
+  .header p { font-size: 14px; color: var(--text2); }
+
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px; padding: 0 6px;
+    background: var(--red); color: #fff; font-size: 12px; font-weight: 700;
+    border-radius: 99px;
+  }
+
+  .toast {
+    position: fixed; top: 20px; right: 20px; z-index: 1000;
+    background: var(--surface); border: 1px solid var(--accent2);
+    border-radius: var(--radius-sm); padding: 14px 18px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    font-size: 14px; max-width: 320px;
+    transform: translateX(400px); transition: transform 0.3s ease;
+  }
+  .toast.show { transform: translateX(0); }
+  .toast-title { font-weight: 600; margin-bottom: 4px; color: var(--accent2); }
+
+  .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-btn {
+    padding: 8px 16px; border-radius: 99px; border: 1px solid var(--border2);
+    background: var(--surface); color: var(--text2); font-family: Sarabun, sans-serif;
+    font-size: 13px; cursor: pointer; transition: 0.15s;
+  }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .card-list { display: flex; flex-direction: column; gap: 10px; }
+  .booking-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+    display: grid; grid-template-columns: 1fr auto; gap: 8px;
+    position: relative;
+  }
+  .booking-card.unread { border-color: var(--accent2); background: linear-gradient(180deg, rgba(99,102,241,0.08), var(--surface)); }
+  .booking-card.unread::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent2); border-radius: var(--radius) 0 0 var(--radius);
+  }
+  .bc-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .bc-name { font-size: 16px; font-weight: 600; }
+  .bc-platform {
+    font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px;
+  }
+  .bc-platform.agoda { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .bc-platform.airbnb { background: rgba(236,72,153,0.15); color: #f472b6; }
+  .bc-status { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+  .bc-status.confirmed { background: rgba(16,185,129,0.15); color: var(--green); }
+  .bc-status.cancelled { background: rgba(239,68,68,0.15); color: var(--red); }
+  .bc-meta { font-size: 13px; color: var(--text2); display: flex; flex-wrap: wrap; gap: 14px; }
+  .bc-meta b { color: var(--text); font-weight: 500; }
+  .bc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .bc-dismiss {
+    background: var(--surface2); border: 1px solid var(--border2); color: var(--text2);
+    font-size: 12px; padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer;
+    font-family: Sarabun, sans-serif;
+  }
+  .bc-dismiss:hover { color: var(--text); }
+  .empty { text-align: center; color: var(--text3); padding: 60px 20px; font-size: 14px; }
+
+  #pw-gate {
+    position: fixed; inset: 0; background: var(--bg); z-index: 999;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #pw-gate .box {
+    background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius);
+    padding: 28px; width: 90%; max-width: 360px; text-align: center;
+  }
+  #pw-gate input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text); font-family: Sarabun, sans-serif;
+    font-size: 14px; padding: 10px 14px; outline: none; margin: 14px 0 8px; text-align: center;
+  }
+  #pw-gate button {
+    width: 100%; padding: 10px; background: linear-gradient(135deg, var(--accent), #4f46e5);
+    color: #fff; border: none; border-radius: var(--radius-sm); font-family: Sarabun, sans-serif;
+    font-size: 14px; cursor: pointer;
+  }
+  #pw-error { font-size: 12px; color: var(--red); margin-bottom: 8px; display: none; }
+</style>
+</head>
+<body>
+
+<div id="pw-gate">
+  <div class="box">
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px;">🔒 ป้อนรหัสผ่าน</div>
+    <div style="font-size:12px;color:var(--text3);">รายชื่อผู้เข้าพักเป็นข้อมูลส่วนตัว</div>
+    <input type="password" id="pw-input" placeholder="รหัสผ่าน..." onkeydown="if(event.key==='Enter')checkPw()">
+    <div id="pw-error">รหัสผ่านไม่ถูกต้อง</div>
+    <button onclick="checkPw()">ยืนยัน</button>
+  </div>
+</div>
+
+<div class="container" id="main" style="display:none;">
+  <div class="header">
+    <div class="header-logo"><span>📅</span><p>AssetLiving</p></div>
+    <h1>การจองที่พัก <span class="badge" id="badge-count" style="display:none;">0</span></h1>
+    <p>Agoda / Airbnb · ดึงจากอีเมลยืนยันการจองอัตโนมัติ</p>
+  </div>
+
+  <div class="filter-row">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">ทั้งหมด</button>
+    <button class="filter-btn" data-filter="unread" onclick="setFilter('unread', this)">ยังไม่อ่าน</button>
+    <button class="filter-btn" data-filter="Agoda" onclick="setFilter('Agoda', this)">Agoda</button>
+    <button class="filter-btn" data-filter="Airbnb" onclick="setFilter('Airbnb', this)">Airbnb</button>
+  </div>
+
+  <div class="card-list" id="card-list"></div>
+</div>
+
+<div class="toast" id="toast">
+  <div class="toast-title">🔔 มีการจองใหม่</div>
+  <div id="toast-body"></div>
+</div>
+
+<script>
+const PASSWORD = 'assetliving2026';
+let bookings = [];
+let currentFilter = 'all';
+let knownIds = new Set();
+let pollTimer = null;
+
+function checkPw() {
+  const val = document.getElementById('pw-input').value;
+  if (val === PASSWORD) {
+    sessionStorage.setItem('booking_unlocked', '1');
+    document.getElementById('pw-gate').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    startPolling();
+  } else {
+    document.getElementById('pw-error').style.display = 'block';
+  }
+}
+
+if (sessionStorage.getItem('booking_unlocked') === '1') {
+  document.getElementById('pw-gate').style.display = 'none';
+  document.getElementById('main').style.display = 'block';
+  startPolling();
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+async function fetchBookings(isPoll) {
+  try {
+    const r = await fetch('/api/bookings');
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'fetch failed');
+
+    if (isPoll && knownIds.size > 0) {
+      const newOnes = data.bookings.filter((b) => !knownIds.has(b.id));
+      if (newOnes.length > 0) showToast(newOnes);
+    }
+    bookings = data.bookings;
+    knownIds = new Set(bookings.map((b) => b.id));
+    render();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function showToast(newOnes) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-body').textContent =
+    newOnes.length === 1
+      ? `${newOnes[0].guest_name || 'ผู้เข้าพัก'} · ${newOnes[0].platform}`
+      : `${newOnes.length} รายการใหม่`;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 6000);
+}
+
+function startPolling() {
+  fetchBookings(false);
+  pollTimer = setInterval(() => fetchBookings(true), 30000);
+}
+
+async function markRead(id) {
+  await fetch(`/api/bookings/${id}/read`, { method: 'POST' });
+  const b = bookings.find((x) => x.id === id);
+  if (b) b.read = true;
+  render();
+}
+
+function render() {
+  const unread = bookings.filter((b) => !b.read).length;
+  const badge = document.getElementById('badge-count');
+  if (unread > 0) { badge.style.display = 'inline-flex'; badge.textContent = unread; }
+  else badge.style.display = 'none';
+
+  let list = bookings;
+  if (currentFilter === 'unread') list = list.filter((b) => !b.read);
+  else if (currentFilter === 'Agoda' || currentFilter === 'Airbnb') list = list.filter((b) => b.platform === currentFilter);
+
+  const el = document.getElementById('card-list');
+  if (list.length === 0) {
+    el.innerHTML = '<div class="empty">ไม่มีรายการจอง</div>';
+    return;
+  }
+
+  el.innerHTML = list.map((b) => `
+    <div class="booking-card ${b.read ? '' : 'unread'}">
+      <div>
+        <div class="bc-top">
+          <span class="bc-name">${escapeHtml(b.guest_name || '(ไม่ทราบชื่อ)')}</span>
+          <span class="bc-platform ${b.platform === 'Agoda' ? 'agoda' : 'airbnb'}">${escapeHtml(b.platform)}</span>
+          <span class="bc-status ${b.status === 'ยกเลิก' ? 'cancelled' : 'confirmed'}">${escapeHtml(b.status)}</span>
+        </div>
+        <div class="bc-meta">
+          ${b.phone ? `<span>📞 <b>${escapeHtml(b.phone)}</b></span>` : ''}
+          ${b.check_in ? `<span>🛬 เช็คอิน <b>${escapeHtml(b.check_in)}</b></span>` : ''}
+          ${b.check_out ? `<span>🛫 เช็คเอาท์ <b>${escapeHtml(b.check_out)}</b></span>` : ''}
+          ${b.room ? `<span>🏠 <b>${escapeHtml(b.room)}</b></span>` : ''}
+          ${b.amount != null ? `<span>฿ <b>${Number(b.amount).toLocaleString()}</b></span>` : ''}
+          ${b.booking_id ? `<span>#${escapeHtml(b.booking_id)}</span>` : ''}
+        </div>
+      </div>
+      <div class="bc-right">
+        ${!b.read ? `<button class="bc-dismiss" onclick="markRead('${b.id}')">อ่านแล้ว</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+</script>
+
+</body>
+</html>
