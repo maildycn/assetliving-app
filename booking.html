@@ -69,7 +69,16 @@
   }
   .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+  .section-block { margin-bottom: 28px; }
+  .section-head {
+    font-size: 15px; font-weight: 700; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-head.muted { color: var(--text2); font-weight: 600; }
+  .section-count { font-size: 12px; font-weight: 500; color: var(--text3); }
+
   .card-list { display: flex; flex-direction: column; gap: 10px; }
+  .card-list.history .booking-card { opacity: 0.72; }
   .booking-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 16px 18px;
@@ -163,7 +172,15 @@
     <button class="filter-btn" data-filter="Airbnb" onclick="setFilter('Airbnb', this)">Airbnb</button>
   </div>
 
-  <div class="card-list" id="card-list"></div>
+  <div class="section-block">
+    <div class="section-head">📌 กำลังจะถึง <span class="section-count" id="count-upcoming"></span></div>
+    <div class="card-list" id="card-list-upcoming"></div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-head muted">🗂️ ประวัติ (เข้าพักแล้ว / ยกเลิก) <span class="section-count" id="count-history"></span></div>
+    <div class="card-list history" id="card-list-history"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast">
@@ -259,23 +276,19 @@ async function markRead(id) {
   render();
 }
 
-function render() {
-  const unread = bookings.filter((b) => !b.read).length;
-  const badge = document.getElementById('badge-count');
-  if (unread > 0) { badge.style.display = 'inline-flex'; badge.textContent = unread; }
-  else badge.style.display = 'none';
+// ห้องที่ยัง "ไม่ถึงวันออก" (เช็คเอาท์ >= วันนี้) และไม่ได้ยกเลิก ถือว่า "กำลังจะถึง" นอกนั้นคือ "ประวัติ"
+function isUpcoming(b) {
+  if (b.status === 'ยกเลิก') return false;
+  const refDate = b.check_out || b.check_in;
+  if (!refDate) return true; // ไม่มีวันที่ให้เทียบ ให้โผล่ในกำลังจะถึงไว้ก่อน เผื่อคนตกหล่น
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(refDate);
+  if (isNaN(d.getTime())) return true;
+  return d >= today;
+}
 
-  let list = bookings;
-  if (currentFilter === 'unread') list = list.filter((b) => !b.read);
-  else if (currentFilter === 'Agoda' || currentFilter === 'Airbnb') list = list.filter((b) => b.platform === currentFilter);
-
-  const el = document.getElementById('card-list');
-  if (list.length === 0) {
-    el.innerHTML = '<div class="empty">ไม่มีรายการจอง</div>';
-    return;
-  }
-
-  el.innerHTML = list.map((b) => `
+function cardHtml(b) {
+  return `
     <div class="booking-card ${b.read ? '' : 'unread'}">
       <div>
         <div class="bc-top">
@@ -301,7 +314,32 @@ function render() {
         ${!b.read ? `<button class="bc-dismiss" onclick="markRead('${b.id}')">อ่านแล้ว</button>` : ''}
       </div>
     </div>
-  `).join('');
+  `;
+}
+
+function render() {
+  const unread = bookings.filter((b) => !b.read).length;
+  const badge = document.getElementById('badge-count');
+  if (unread > 0) { badge.style.display = 'inline-flex'; badge.textContent = unread; }
+  else badge.style.display = 'none';
+
+  let list = bookings;
+  if (currentFilter === 'unread') list = list.filter((b) => !b.read);
+  else if (currentFilter === 'Agoda' || currentFilter === 'Airbnb') list = list.filter((b) => b.platform === currentFilter);
+
+  const upcoming = list.filter(isUpcoming)
+    .sort((a, b) => (a.check_in || '9999').localeCompare(b.check_in || '9999'));
+  const history = list.filter((b) => !isUpcoming(b))
+    .sort((a, b) => (b.check_out || b.check_in || '').localeCompare(a.check_out || a.check_in || ''));
+
+  document.getElementById('count-upcoming').textContent = upcoming.length ? `(${upcoming.length})` : '';
+  document.getElementById('count-history').textContent = history.length ? `(${history.length})` : '';
+
+  const upEl = document.getElementById('card-list-upcoming');
+  upEl.innerHTML = upcoming.length ? upcoming.map(cardHtml).join('') : '<div class="empty">ไม่มีรายการที่กำลังจะถึง</div>';
+
+  const histEl = document.getElementById('card-list-history');
+  histEl.innerHTML = history.length ? history.map(cardHtml).join('') : '<div class="empty">ยังไม่มีประวัติ</div>';
 }
 
 function escapeHtml(s) {
