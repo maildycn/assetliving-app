@@ -218,6 +218,12 @@ async function extractBookingWithClaude(emailText, fromAddr, subject) {
   "base_rate": ราคาห้องพื้นฐาน (base rate / room rate) ก่อนรวมภาษีและค่าธรรมเนียม — ไม่ใช่ยอดสุทธิ/ยอดรวมที่ต้องชำระ ถ้าอีเมลแยกรายการราคาห้องออกจากภาษี/ค่าธรรมเนียมให้ใช้ตัวเลขราคาห้องอย่างเดียว ถ้าอีเมลให้มาแค่ยอดรวมโดยไม่แยก ให้ใช้ยอดรวมนั้นแทน เป็นตัวเลขล้วนไม่มีสัญลักษณ์เงิน (number หรือ null)
 }
 
+กฎสำคัญเรื่องวันที่ (อ่านพลาดบ่อย ต้องระวังเป็นพิเศษ):
+- ปีต้องเป็น ค.ศ. (Gregorian) เท่านั้น ถ้าอีเมลเขียนปีแบบ พ.ศ. (เช่น 2569) ให้แปลงเป็น ค.ศ. ก่อนตอบ (ลบ 543: 2569 → 2026) ห้ามตอบปี พ.ศ. ดิบๆ เด็ดขาด
+- check_in กับ check_out ต้องอ้างอิงจากคำที่อีเมลระบุไว้ชัดเจน (เช่น "Check-in", "Check-out", "วันเข้าพัก", "วันออก") ห้ามเดาจากตำแหน่งวันที่ในอีเมลเฉยๆ
+- check_out ต้องเป็นวันที่หลัง check_in เสมอ ถ้าคำนวณแล้วไม่ใช่ ให้ตรวจทานใหม่ว่าอ่านสลับกันหรือไม่
+- ถ้าอีเมลเขียนวันที่แบบกำกวม (เช่น 03/04/2026 ไม่ชัดว่า DD/MM หรือ MM/DD) ให้ยึดรูปแบบที่แพลตฟอร์มนั้นใช้ปกติ (Agoda/Airbnb มักเขียนชื่อเดือนเป็นตัวอักษรเพื่อกันกำกวมอยู่แล้ว เช่น "October 23, 2026" — ใช้ค่านั้นเป็นหลักถ้ามี)
+
 อีเมล:
 ${emailText.slice(0, 6000)}`;
 
@@ -231,6 +237,43 @@ ${emailText.slice(0, 6000)}`;
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('AI did not return JSON: ' + raw.slice(0, 200));
   return { ...JSON.parse(m[0]), platform };
+}
+
+// ตรวจความสมเหตุสมผลของวันที่หลังแยกข้อมูล แทนที่จะเชื่อ AI เฉยๆ — แก้ปี พ.ศ. ที่หลุดมาให้อัตโนมัติ, flag ที่เหลือไว้ให้คนตรวจ
+function sanityCheckDates(booking) {
+  const warnings = [];
+  const fixYear = (dateStr, label) => {
+    if (!dateStr) return dateStr;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!match) { warnings.push(`รูปแบบวันที่ ${label} ผิดปกติ: "${dateStr}"`); return dateStr; }
+    let year = parseInt(match[1], 10);
+    if (year > 2400) {
+      year -= 543;
+      warnings.push(`${label}: AI อ่านเป็นปี พ.ศ. ${match[1]} ระบบแปลงเป็น ค.ศ. ${year} ให้อัตโนมัติ — โปรดตรวจสอบ`);
+      return `${year}-${match[2]}-${match[3]}`;
+    }
+    return dateStr;
+  };
+
+  booking.check_in = fixYear(booking.check_in, 'เช็คอิน');
+  booking.check_out = fixYear(booking.check_out, 'เช็คเอาท์');
+
+  const now = new Date();
+  const farFuture = new Date(); farFuture.setFullYear(now.getFullYear() + 2);
+  const farPast = new Date(); farPast.setFullYear(now.getFullYear() - 1);
+  for (const [label, val] of [['เช็คอิน', booking.check_in], ['เช็คเอาท์', booking.check_out]]) {
+    if (!val) continue;
+    const d = new Date(val);
+    if (isNaN(d.getTime())) warnings.push(`วันที่${label} "${val}" แปลงเป็นวันที่จริงไม่ได้`);
+    else if (d < farPast || d > farFuture) warnings.push(`วันที่${label} (${val}) ห่างจากวันนี้ผิดปกติ ควรตรวจสอบว่า AI อ่านถูกหรือไม่`);
+  }
+  if (booking.check_in && booking.check_out) {
+    const inD = new Date(booking.check_in), outD = new Date(booking.check_out);
+    if (!isNaN(inD.getTime()) && !isNaN(outD.getTime()) && outD <= inD) {
+      warnings.push('วันเช็คเอาท์ไม่ได้อยู่หลังวันเช็คอิน — อาจอ่านสลับกันหรือผิด');
+    }
+  }
+  return warnings;
 }
 
 async function syncBookings(queryOverride) {
@@ -264,6 +307,7 @@ async function syncBookings(queryOverride) {
       const bodyText = extractEmailBody(msg.payload);
 
       const booking = await extractBookingWithClaude(bodyText, fromAddr, subject);
+      const dateWarnings = sanityCheckDates(booking);
 
       const props = {
         'ชื่อผู้เข้าพัก':      { title: [{ text: { content: booking.guest_name || '(ไม่ทราบชื่อ)' } }] },
@@ -278,6 +322,11 @@ async function syncBookings(queryOverride) {
       if (typeof booking.base_rate === 'number') props['ราคา Base Rate (บาท)'] = { number: booking.base_rate };
       if (booking.check_in)                props['วันเช็คอิน']       = { date: { start: booking.check_in } };
       if (booking.check_out)               props['วันเช็คเอาท์']     = { date: { start: booking.check_out } };
+      if (dateWarnings.length) {
+        props['หมายเหตุ'] = { rich_text: [{ text: { content: '⚠️ ' + dateWarnings.join(' / ') } }] };
+        summary.dateWarnings = summary.dateWarnings || [];
+        summary.dateWarnings.push({ id: m.id, warnings: dateWarnings });
+      }
 
       const createRes = await fetch('https://api.notion.com/v1/pages', {
         method: 'POST',
