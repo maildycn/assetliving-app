@@ -199,10 +199,12 @@ async function notionBookingExists(dbId, notionToken, messageId) {
   return (data.results || []).length > 0;
 }
 
-async function extractBookingWithClaude(emailText, fromAddr) {
+async function extractBookingWithClaude(emailText, fromAddr, subject) {
   const apiKey = process.env.ANTHROPIC_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_KEY not configured');
-  const platform = /agoda/i.test(fromAddr) ? 'Agoda' : /airbnb/i.test(fromAddr) ? 'Airbnb' : 'ไม่ทราบ';
+  // อีเมลที่ถูก forward ต่อ (ไม่ว่าด้วย filter หรือ manual) จะมี From เป็นคนส่งต่อ ไม่ใช่ agoda/airbnb อีกต่อไป — เผื่อไว้ด้วย subject + เนื้อหา
+  const haystack = `${fromAddr} ${subject || ''} ${emailText.slice(0, 500)}`;
+  const platform = /agoda/i.test(haystack) ? 'Agoda' : /airbnb/i.test(haystack) ? 'Airbnb' : 'ไม่ทราบ';
 
   const prompt = `นี่คืออีเมลยืนยันการจองที่พักจาก ${platform} แยกข้อมูลต่อไปนี้แล้วตอบเป็น JSON ล้วนๆ เท่านั้น ห้ามมีข้อความอื่นนอกเหนือจาก JSON:
 {
@@ -231,7 +233,7 @@ ${emailText.slice(0, 6000)}`;
   return { ...JSON.parse(m[0]), platform };
 }
 
-async function syncBookings() {
+async function syncBookings(queryOverride) {
   const notionToken = process.env.NOTION_TOKEN;
   const bookingDb    = process.env.NOTION_BOOKING_DB_ID;
   if (!notionToken || !bookingDb) throw new Error('NOTION_TOKEN / NOTION_BOOKING_DB_ID not configured');
@@ -241,7 +243,7 @@ async function syncBookings() {
   const accessToken = await getGmailAccessToken();
   const listRes = await fetch(
     'https://gmail.googleapis.com/gmail/v1/users/me/messages?' +
-      new URLSearchParams({ q: 'from:(agoda.com OR airbnb.com) newer_than:14d', maxResults: '20' }),
+      new URLSearchParams({ q: queryOverride || 'from:(agoda.com OR airbnb.com) newer_than:14d', maxResults: '20' }),
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const listData = await listRes.json();
@@ -256,10 +258,12 @@ async function syncBookings() {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const msg = await msgRes.json();
-      const fromAddr = (msg.payload?.headers || []).find((h) => h.name === 'From')?.value || '';
+      const headers  = msg.payload?.headers || [];
+      const fromAddr = headers.find((h) => h.name === 'From')?.value || '';
+      const subject  = headers.find((h) => h.name === 'Subject')?.value || '';
       const bodyText = extractEmailBody(msg.payload);
 
-      const booking = await extractBookingWithClaude(bodyText, fromAddr);
+      const booking = await extractBookingWithClaude(bodyText, fromAddr, subject);
 
       const props = {
         'ชื่อผู้เข้าพัก':      { title: [{ text: { content: booking.guest_name || '(ไม่ทราบชื่อ)' } }] },
@@ -294,7 +298,7 @@ async function syncBookings() {
 app.get('/cron/sync-bookings', async (req, res) => {
   if (!process.env.BOOKING_CRON_SECRET || req.query.key !== process.env.BOOKING_CRON_SECRET) return res.status(403).send('Forbidden');
   try {
-    res.json(await syncBookings());
+    res.json(await syncBookings(req.query.q));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
