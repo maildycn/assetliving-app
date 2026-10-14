@@ -215,7 +215,7 @@ async function extractBookingWithClaude(emailText, fromAddr, subject) {
   "room": ชื่อห้องพัก/ทรัพย์สินที่ถูกจอง (string หรือ null),
   "status": "ยืนยันแล้ว" หรือ "ยกเลิก",
   "booking_id": หมายเลขการจอง/อ้างอิง (string หรือ null),
-  "amount": ยอดเงินรวมที่ต้องชำระ ถ้ามีระบุในอีเมล เป็นตัวเลขล้วนไม่มีสัญลักษณ์เงิน (number หรือ null)
+  "base_rate": ราคาห้องพื้นฐาน (base rate / room rate) ก่อนรวมภาษีและค่าธรรมเนียม — ไม่ใช่ยอดสุทธิ/ยอดรวมที่ต้องชำระ ถ้าอีเมลแยกรายการราคาห้องออกจากภาษี/ค่าธรรมเนียมให้ใช้ตัวเลขราคาห้องอย่างเดียว ถ้าอีเมลให้มาแค่ยอดรวมโดยไม่แยก ให้ใช้ยอดรวมนั้นแทน เป็นตัวเลขล้วนไม่มีสัญลักษณ์เงิน (number หรือ null)
 }
 
 อีเมล:
@@ -275,7 +275,7 @@ async function syncBookings(queryOverride) {
       if (booking.phone)                   props['เบอร์โทร']         = { phone_number: booking.phone };
       if (booking.room)                    props['ห้อง/ทรัพย์สิน']    = { rich_text: [{ text: { content: booking.room } }] };
       if (booking.booking_id)              props['หมายเลขการจอง']    = { rich_text: [{ text: { content: booking.booking_id } }] };
-      if (typeof booking.amount === 'number') props['ยอดเงิน (บาท)'] = { number: booking.amount };
+      if (typeof booking.base_rate === 'number') props['ราคา Base Rate (บาท)'] = { number: booking.base_rate };
       if (booking.check_in)                props['วันเช็คอิน']       = { date: { start: booking.check_in } };
       if (booking.check_out)               props['วันเช็คเอาท์']     = { date: { start: booking.check_out } };
 
@@ -331,7 +331,8 @@ app.get('/api/bookings', async (req, res) => {
         room: props['ห้อง/ทรัพย์สิน']?.rich_text?.[0]?.plain_text || '',
         status: props['สถานะการจอง']?.select?.name || '',
         booking_id: props['หมายเลขการจอง']?.rich_text?.[0]?.plain_text || '',
-        amount: props['ยอดเงิน (บาท)']?.number ?? null,
+        base_rate: props['ราคา Base Rate (บาท)']?.number ?? null,
+        notes: props['หมายเหตุ']?.rich_text?.[0]?.plain_text || '',
         read: !!props['อ่านแล้ว']?.checkbox,
         created_time: p.created_time,
       };
@@ -349,6 +350,23 @@ app.post('/api/bookings/:id/read', async (req, res) => {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${notionToken}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
       body: JSON.stringify({ properties: { 'อ่านแล้ว': { checkbox: true } } }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || 'update failed');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bookings/:id/notes', async (req, res) => {
+  const notionToken = process.env.NOTION_TOKEN;
+  const notes = typeof req.body.notes === 'string' ? req.body.notes : '';
+  try {
+    const r = await fetch(`https://api.notion.com/v1/pages/${req.params.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${notionToken}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ properties: { 'หมายเหตุ': { rich_text: notes ? [{ text: { content: notes } }] : [] } } }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.message || 'update failed');

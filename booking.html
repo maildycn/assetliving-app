@@ -93,6 +93,19 @@
   .bc-status.cancelled { background: rgba(239,68,68,0.15); color: var(--red); }
   .bc-meta { font-size: 13px; color: var(--text2); display: flex; flex-wrap: wrap; gap: 14px; }
   .bc-meta b { color: var(--text); font-weight: 500; }
+  .bc-notes { margin-top: 10px; display: flex; gap: 8px; align-items: flex-start; }
+  .bc-notes-input {
+    flex: 1; min-height: 36px; max-height: 120px; resize: vertical;
+    background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+    color: var(--text); font-family: Sarabun, sans-serif; font-size: 13px; padding: 7px 10px; outline: none;
+  }
+  .bc-notes-input:focus { border-color: var(--accent2); }
+  .bc-notes-save {
+    background: var(--surface2); border: 1px solid var(--border2); color: var(--text2);
+    font-size: 12px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer;
+    font-family: Sarabun, sans-serif; white-space: nowrap;
+  }
+  .bc-notes-save:hover { color: var(--text); border-color: var(--accent2); }
   .bc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .bc-dismiss {
     background: var(--surface2); border: 1px solid var(--border2); color: var(--text2);
@@ -201,7 +214,7 @@ async function fetchBookings(isPoll) {
     }
     bookings = data.bookings;
     knownIds = new Set(bookings.map((b) => b.id));
-    render();
+    if (!isPoll || !editingNotes) render(); // อย่า re-render ทับขณะกำลังพิมพ์หมายเหตุอยู่
   } catch (err) {
     console.error(err);
   }
@@ -221,6 +234,22 @@ function startPolling() {
   fetchBookings(false);
   pollTimer = setInterval(() => fetchBookings(true), 30000);
 }
+
+async function saveNotes(id) {
+  const el = document.getElementById(`notes-${id}`);
+  const notes = el.value;
+  await fetch(`/api/bookings/${id}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes }),
+  });
+  const b = bookings.find((x) => x.id === id);
+  if (b) b.notes = notes;
+}
+
+let editingNotes = false;
+document.addEventListener('focusin', (e) => { if (e.target.classList?.contains('bc-notes-input')) editingNotes = true; });
+document.addEventListener('focusout', (e) => { if (e.target.classList?.contains('bc-notes-input')) editingNotes = false; });
 
 async function markRead(id) {
   await fetch(`/api/bookings/${id}/read`, { method: 'POST' });
@@ -258,8 +287,12 @@ function render() {
           ${b.check_in ? `<span>🛬 เช็คอิน <b>${escapeHtml(b.check_in)}</b></span>` : ''}
           ${b.check_out ? `<span>🛫 เช็คเอาท์ <b>${escapeHtml(b.check_out)}</b></span>` : ''}
           ${b.room ? `<span>🏠 <b>${escapeHtml(b.room)}</b></span>` : ''}
-          ${b.amount != null ? `<span>฿ <b>${Number(b.amount).toLocaleString()}</b></span>` : ''}
+          ${b.base_rate != null ? `<span>฿ Base Rate <b>${Number(b.base_rate).toLocaleString()}</b></span>` : ''}
           ${b.booking_id ? `<span>#${escapeHtml(b.booking_id)}</span>` : ''}
+        </div>
+        <div class="bc-notes">
+          <textarea class="bc-notes-input" id="notes-${b.id}" placeholder="หมายเหตุ...">${escapeHtml(b.notes || '')}</textarea>
+          <button class="bc-notes-save" onclick="saveNotes('${b.id}')">บันทึกหมายเหตุ</button>
         </div>
       </div>
       <div class="bc-right">
