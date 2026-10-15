@@ -218,7 +218,8 @@ async function extractBookingWithClaude(emailText, fromAddr, subject) {
   "room": ชื่อห้องพัก/ทรัพย์สินที่ถูกจอง (string หรือ null),
   "status": "ยืนยันแล้ว" หรือ "ยกเลิก",
   "booking_id": หมายเลขการจอง/อ้างอิง (string หรือ null),
-  "base_rate": ราคาห้องพื้นฐาน (base rate / room rate) ก่อนรวมภาษีและค่าธรรมเนียม — ไม่ใช่ยอดสุทธิ/ยอดรวมที่ต้องชำระ ถ้าอีเมลแยกรายการราคาห้องออกจากภาษี/ค่าธรรมเนียมให้ใช้ตัวเลขราคาห้องอย่างเดียว ถ้าอีเมลให้มาแค่ยอดรวมโดยไม่แยก ให้ใช้ยอดรวมนั้นแทน เป็นตัวเลขล้วนไม่มีสัญลักษณ์เงิน (number หรือ null)
+  "base_rate": ราคาห้องพื้นฐาน (base rate / room rate) ก่อนรวมภาษีและค่าธรรมเนียม — ไม่ใช่ยอดสุทธิ/ยอดรวมที่ต้องชำระ ถ้าอีเมลแยกรายการราคาห้องออกจากภาษี/ค่าธรรมเนียมให้ใช้ตัวเลขราคาห้องอย่างเดียว ถ้าอีเมลให้มาแค่ยอดรวมโดยไม่แยก ให้ใช้ยอดรวมนั้นแทน เป็นตัวเลขล้วนไม่มีสัญลักษณ์เงิน (number หรือ null),
+  "manage_url": URL เต็มของลิงก์ดู/จัดการการจองนี้โดยตรงในอีเมล (ข้อความลิงก์มักเป็น "ดูรายละเอียดการจอง", "View booking", "Manage booking" หรือคล้ายกัน) ให้คัดลอก URL มาเป๊ะๆ ตามที่ปรากฏ ห้ามแต่งเติมหรือตัดทอน ถ้าไม่เจอให้เป็น null (string หรือ null)
 }
 
 กฎสำคัญเรื่องวันที่ (อ่านพลาดบ่อย ต้องระวังเป็นพิเศษ):
@@ -307,7 +308,8 @@ async function sendOwnerApprovalEmail(pageId, booking) {
         <a href="${approveUrl}" style="background:#10b981;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold;margin-right:12px;">✅ ห้องว่าง ยืนยันได้</a>
         <a href="${rejectUrl}" style="background:#ef4444;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold;">❌ ห้องไม่ว่าง</a>
       </div>
-      <p style="margin-top:20px;color:#888;font-size:12px;">คลิกแล้วจะมีหน้ายืนยันอีกครั้งก่อนบันทึกผล</p>
+      <p style="margin-top:20px;color:#888;font-size:12px;">คลิกแล้วจะมีหน้ายืนยันอีกครั้งก่อนบันทึกผล — ปุ่มนี้เป็นการยืนยัน/ปฏิเสธกันภายในเท่านั้น ไม่ได้ไปทำรายการใดๆ ใน Agoda ให้อัตโนมัติ</p>
+      ${booking.manage_url ? `<p style="margin-top:12px;"><a href="${booking.manage_url}" style="color:#6366f1;">🔗 ไปที่หน้าการจองนี้ใน Agoda</a> (ยืนยัน/ยกเลิกฝั่ง Agoda ต้องทำที่นี่ด้วยตัวเองเสมอ)</p>` : ''}
     </div>`;
 
   const transport = nodemailer.createTransport({
@@ -421,6 +423,7 @@ async function syncBookings(queryOverride) {
       if (booking.room)                    props['ห้อง/ทรัพย์สิน']    = { rich_text: [{ text: { content: booking.room } }] };
       if (booking.booking_id)              props['หมายเลขการจอง']    = { rich_text: [{ text: { content: booking.booking_id } }] };
       if (typeof booking.base_rate === 'number') props['ราคา Base Rate (บาท)'] = { number: booking.base_rate };
+      if (booking.manage_url && /^https?:\/\//.test(booking.manage_url)) props['ลิงก์จัดการใน Agoda'] = { url: booking.manage_url };
       if (booking.check_in)                props['วันเช็คอิน']       = { date: { start: booking.check_in } };
       if (booking.check_out)               props['วันเช็คเอาท์']     = { date: { start: booking.check_out } };
       if (dateWarnings.length) {
@@ -489,6 +492,7 @@ app.get('/api/bookings', async (req, res) => {
         status: props['สถานะการจอง']?.select?.name || '',
         booking_id: props['หมายเลขการจอง']?.rich_text?.[0]?.plain_text || '',
         base_rate: props['ราคา Base Rate (บาท)']?.number ?? null,
+        manage_url: props['ลิงก์จัดการใน Agoda']?.url || '',
         owner_status: props['สถานะเจ้าของห้อง']?.select?.name || '',
         notes: props['หมายเหตุ']?.rich_text?.[0]?.plain_text || '',
         read: !!props['อ่านแล้ว']?.checkbox,

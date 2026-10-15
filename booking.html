@@ -325,6 +325,7 @@ function cardHtml(b) {
           ${b.room ? `<span>🏠 <b>${escapeHtml(b.room)}</b></span>` : ''}
           ${b.base_rate != null ? `<span>฿ Base Rate <b>${Number(b.base_rate).toLocaleString()}</b></span>` : ''}
           ${b.booking_id ? `<span>#${escapeHtml(b.booking_id)}</span>` : ''}
+          ${b.manage_url ? `<span>🔗 <a href="${escapeHtml(b.manage_url)}" target="_blank" rel="noopener" style="color:var(--accent2);">เปิดใน Agoda</a></span>` : ''}
         </div>
         <div class="bc-notes">
           <textarea class="bc-notes-input" id="notes-${b.id}" placeholder="หมายเหตุ...">${escapeHtml(b.notes || '')}</textarea>
