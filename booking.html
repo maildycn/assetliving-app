@@ -125,6 +125,15 @@
   .bc-dismiss:hover { color: var(--text); }
   .empty { text-align: center; color: var(--text3); padding: 60px 20px; font-size: 14px; }
 
+  .summary-grid { display: flex; gap: 10px; flex-wrap: wrap; }
+  .summary-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 16px; min-width: 150px; flex: 1;
+  }
+  .summary-month { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .summary-amount { font-size: 20px; font-weight: 700; color: var(--green); }
+  .summary-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
   #pw-gate {
     position: fixed; inset: 0; background: var(--bg); z-index: 999;
     display: flex; align-items: center; justify-content: center;
@@ -170,6 +179,11 @@
     <button class="filter-btn" data-filter="unread" onclick="setFilter('unread', this)">ยังไม่อ่าน</button>
     <button class="filter-btn" data-filter="Agoda" onclick="setFilter('Agoda', this)">Agoda</button>
     <button class="filter-btn" data-filter="Airbnb" onclick="setFilter('Airbnb', this)">Airbnb</button>
+  </div>
+
+  <div class="section-block">
+    <div class="section-head">💰 สรุปรายรับรายเดือน <span class="section-count">(นับจากวันเช็คอิน, Base Rate)</span></div>
+    <div class="summary-grid" id="monthly-summary"></div>
   </div>
 
   <div class="section-block">
@@ -317,6 +331,37 @@ function cardHtml(b) {
   `;
 }
 
+const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+
+// สรุปยอด Base Rate รวมต่อเดือน นับจากวันเช็คอิน ไม่รวมรายการที่ยกเลิก
+function renderMonthlySummary(list) {
+  const groups = {};
+  list.forEach((b) => {
+    if (b.status === 'ยกเลิก' || !b.check_in) return;
+    const d = new Date(b.check_in);
+    if (isNaN(d.getTime())) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!groups[key]) groups[key] = { count: 0, total: 0, unknown: 0, year: d.getFullYear(), month: d.getMonth() };
+    groups[key].count++;
+    if (typeof b.base_rate === 'number') groups[key].total += b.base_rate;
+    else groups[key].unknown++;
+  });
+
+  const keys = Object.keys(groups).sort();
+  const el = document.getElementById('monthly-summary');
+  if (!keys.length) { el.innerHTML = '<div class="empty">ยังไม่มีข้อมูลรายรับ</div>'; return; }
+  el.innerHTML = keys.map((k) => {
+    const g = groups[k];
+    return `
+      <div class="summary-card">
+        <div class="summary-month">${THAI_MONTHS[g.month]} ${g.year}</div>
+        <div class="summary-amount">฿${g.total.toLocaleString()}</div>
+        <div class="summary-sub">${g.count} การจอง${g.unknown ? ` · ${g.unknown} ไม่ทราบราคา` : ''}</div>
+      </div>
+    `;
+  }).join('');
+}
+
 function render() {
   const unread = bookings.filter((b) => !b.read).length;
   const badge = document.getElementById('badge-count');
@@ -326,6 +371,8 @@ function render() {
   let list = bookings;
   if (currentFilter === 'unread') list = list.filter((b) => !b.read);
   else if (currentFilter === 'Agoda' || currentFilter === 'Airbnb') list = list.filter((b) => b.platform === currentFilter);
+
+  renderMonthlySummary(currentFilter === 'unread' ? bookings : list);
 
   const upcoming = list.filter(isUpcoming)
     .sort((a, b) => (a.check_in || '9999').localeCompare(b.check_in || '9999'));
