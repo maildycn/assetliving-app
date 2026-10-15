@@ -101,6 +101,10 @@
   .bc-status.confirmed { background: rgba(16,185,129,0.15); color: var(--green); }
   .bc-status.cancelled { background: rgba(239,68,68,0.15); color: var(--red); }
   .bc-warn { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: rgba(245,158,11,0.15); color: var(--amber); }
+  .bc-owner { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+  .bc-owner.pending { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .bc-owner.approved { background: rgba(16,185,129,0.15); color: var(--green); }
+  .bc-owner.rejected { background: rgba(239,68,68,0.15); color: var(--red); }
   .bc-meta { font-size: 13px; color: var(--text2); display: flex; flex-wrap: wrap; gap: 14px; }
   .bc-meta b { color: var(--text); font-weight: 500; }
   .bc-notes { margin-top: 10px; display: flex; gap: 8px; align-items: flex-start; }
@@ -310,6 +314,9 @@ function cardHtml(b) {
           <span class="bc-platform ${b.platform === 'Agoda' ? 'agoda' : 'airbnb'}">${escapeHtml(b.platform)}</span>
           <span class="bc-status ${b.status === 'ยกเลิก' ? 'cancelled' : 'confirmed'}">${escapeHtml(b.status)}</span>
           ${(b.notes || '').startsWith('⚠️') ? `<span class="bc-warn">⚠️ ตรวจสอบวันที่</span>` : ''}
+          ${b.owner_status === 'รอตอบรับ' ? `<span class="bc-owner pending">⏳ รอเจ้าของห้องตอบรับ</span>` : ''}
+          ${b.owner_status === 'ยืนยันแล้ว' ? `<span class="bc-owner approved">✅ เจ้าของห้องยืนยันว่าง</span>` : ''}
+          ${b.owner_status === 'ปฏิเสธ' ? `<span class="bc-owner rejected">❌ เจ้าของห้องแจ้งไม่ว่าง</span>` : ''}
         </div>
         <div class="bc-meta">
           ${b.phone ? `<span>📞 <b>${escapeHtml(b.phone)}</b></span>` : ''}

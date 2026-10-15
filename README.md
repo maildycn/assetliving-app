@@ -18,6 +18,14 @@ Set in the Render service's Environment tab:
 - `GOOGLE_GMAIL_CLIENT_ID` / `GOOGLE_GMAIL_CLIENT_SECRET` / `GOOGLE_GMAIL_REFRESH_TOKEN` — Gmail API **OAuth user credentials** (separate Google Cloud project "My First Project", OAuth client "booking-sync-gmail"), authorized once as maildy.cn@gmail.com, scope `gmail.readonly`. Used only by booking-sync to read forwarded Agoda/Airbnb emails.
 - `NOTION_BOOKING_DB_ID` — the "📅 Booking" Notion database (`7f61034f5370431ba56002b25ed7c886`), under the same "🏠 LeaseAI — ระบบจัดการสัญญาเช่า" page as the Contract DB.
 - `BOOKING_CRON_SECRET` — random string. Required to call `/cron/sync-bookings?key=<BOOKING_CRON_SECRET>` (returns 403 otherwise).
+- `OWNER_NOTIFY_EMAIL_USER` / `OWNER_NOTIFY_EMAIL_APP_PASSWORD` — a dedicated Gmail account (with 2FA + an [App Password](https://myaccount.google.com/apppasswords), not the account's real password) used only as the **sender** for owner-approval emails below. Sends via `nodemailer`'s Gmail SMTP transport.
+- `OWNER_EMAIL` — the co-owner's real email address (the **recipient** of owner-approval emails).
+- `OWNER_APPROVAL_SECRET` — random string used to sign the approve/reject links sent to the owner, so the links can't be guessed/forged.
+- All four of the above are optional as a group — if any is missing, `sendOwnerApprovalEmail()` silently skips sending (sync still works normally, just without the notification).
+
+## Owner approval (room-availability check by email, not phone call)
+
+Every time a new booking is synced in (see below), an email is sent to `OWNER_EMAIL` from `OWNER_NOTIFY_EMAIL_USER` with the booking details and two buttons: **✅ ห้องว่าง ยืนยันได้** / **❌ ห้องไม่ว่าง**. Clicking either opens a confirmation page (`GET /owner-response/:id/:action`) — the actual Notion update only happens after that confirm button is submitted (`POST /owner-response/:id/:action`), specifically to avoid corporate/email-client "safe link" scanners auto-triggering the action just by prefetching the GET link. The result is written to a new Notion Booking DB property **"สถานะเจ้าของห้อง"** (รอตอบรับ / ยืนยันแล้ว / ปฏิเสธ) and shown as a badge on each card in `booking.html`, so checking room availability no longer requires a phone call.
 
 ## Booking sync (Agoda/Airbnb → Notion → booking.html)
 

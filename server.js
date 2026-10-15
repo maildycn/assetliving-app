@@ -1,11 +1,14 @@
-const express = require('express');
-const path    = require('path');
-const crypto  = require('crypto');
+const express    = require('express');
+const path       = require('path');
+const crypto     = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const APP_BASE_URL = 'https://assetliving-app.onrender.com';
 
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname)));
 
 // ── In-memory file store (served as public URLs for Notion external links) ────
@@ -276,6 +279,103 @@ function sanityCheckDates(booking) {
   return warnings;
 }
 
+// ── แจ้งเจ้าของห้องให้กดยืนยัน/ปฏิเสธการจองทางอีเมล (แทนการโทรถาม) ───────────
+function escapeHtmlServer(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function ownerToken(pageId, action) {
+  return crypto.createHmac('sha256', process.env.OWNER_APPROVAL_SECRET || '').update(`${pageId}:${action}`).digest('hex').slice(0, 24);
+}
+
+async function sendOwnerApprovalEmail(pageId, booking) {
+  const { OWNER_NOTIFY_EMAIL_USER, OWNER_NOTIFY_EMAIL_APP_PASSWORD, OWNER_EMAIL, OWNER_APPROVAL_SECRET } = process.env;
+  if (!OWNER_NOTIFY_EMAIL_USER || !OWNER_NOTIFY_EMAIL_APP_PASSWORD || !OWNER_EMAIL || !OWNER_APPROVAL_SECRET) return; // ยังไม่ตั้งค่า ข้ามไปเงียบๆ
+
+  const approveUrl = `${APP_BASE_URL}/owner-response/${pageId}/approve?token=${ownerToken(pageId, 'approve')}`;
+  const rejectUrl  = `${APP_BASE_URL}/owner-response/${pageId}/reject?token=${ownerToken(pageId, 'reject')}`;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;color:#111;">
+      <h2>มีคำขอจองใหม่ — ต้องการให้ยืนยันห้องว่าง</h2>
+      <p><b>ผู้เข้าพัก:</b> ${escapeHtmlServer(booking.guest_name || '(ไม่ทราบชื่อ)')}</p>
+      <p><b>แพลตฟอร์ม:</b> ${escapeHtmlServer(booking.platform || '-')}</p>
+      ${booking.room ? `<p><b>ห้อง/ทรัพย์สิน:</b> ${escapeHtmlServer(booking.room)}</p>` : ''}
+      <p><b>เช็คอิน:</b> ${escapeHtmlServer(booking.check_in || '-')} &nbsp; <b>เช็คเอาท์:</b> ${escapeHtmlServer(booking.check_out || '-')}</p>
+      ${typeof booking.base_rate === 'number' ? `<p><b>Base Rate:</b> ฿${booking.base_rate.toLocaleString()}</p>` : ''}
+      <div style="margin-top:24px;">
+        <a href="${approveUrl}" style="background:#10b981;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold;margin-right:12px;">✅ ห้องว่าง ยืนยันได้</a>
+        <a href="${rejectUrl}" style="background:#ef4444;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold;">❌ ห้องไม่ว่าง</a>
+      </div>
+      <p style="margin-top:20px;color:#888;font-size:12px;">คลิกแล้วจะมีหน้ายืนยันอีกครั้งก่อนบันทึกผล</p>
+    </div>`;
+
+  const transport = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: OWNER_NOTIFY_EMAIL_USER, pass: OWNER_NOTIFY_EMAIL_APP_PASSWORD },
+  });
+  await transport.sendMail({
+    from: OWNER_NOTIFY_EMAIL_USER,
+    to: OWNER_EMAIL,
+    subject: `คำขอจองใหม่ — ${booking.guest_name || 'ผู้เข้าพัก'} (เช็คอิน ${booking.check_in || '-'})`,
+    html,
+  });
+}
+
+function ownerConfirmPage(id, action, token) {
+  const label = action === 'approve' ? 'ยืนยันว่าห้องว่าง' : 'แจ้งว่าห้องไม่ว่าง';
+  const color = action === 'approve' ? '#10b981' : '#ef4444';
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ยืนยันคำตอบ</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0c12;color:#f1f5f9;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;}
+    .box{text-align:center;max-width:360px;} button{padding:14px 28px;border:none;border-radius:8px;background:${color};color:#fff;font-size:16px;font-weight:bold;cursor:pointer;}</style>
+    </head><body><div class="box">
+    <h2>ต้องการ${label}ใช่หรือไม่?</h2>
+    <form method="POST" action="/owner-response/${id}/${action}?token=${encodeURIComponent(token)}">
+      <button type="submit">ยืนยัน${label}</button>
+    </form>
+    </div></body></html>`;
+}
+
+function ownerResultPage(approved) {
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกคำตอบแล้ว</title>
+    <style>body{font-family:Arial,sans-serif;background:#0a0c12;color:#f1f5f9;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}</style>
+    </head><body><div style="text-align:center;padding:24px;">
+    <div style="font-size:48px;">${approved ? '✅' : '❌'}</div>
+    <h2>${approved ? 'ยืนยันห้องว่างแล้ว' : 'บันทึกว่าห้องไม่ว่างแล้ว'}</h2>
+    <p style="color:#94a3b8;">ระบบอัปเดตเรียบร้อย ปิดหน้านี้ได้เลย</p>
+    </div></body></html>`;
+}
+
+app.get('/owner-response/:id/:action', (req, res) => {
+  const { id, action } = req.params;
+  const { token } = req.query;
+  if (!['approve', 'reject'].includes(action)) return res.status(400).send('Invalid action');
+  if (!process.env.OWNER_APPROVAL_SECRET || token !== ownerToken(id, action)) return res.status(403).send('ลิงก์ไม่ถูกต้องหรือหมดอายุ');
+  res.send(ownerConfirmPage(id, action, token));
+});
+
+app.post('/owner-response/:id/:action', async (req, res) => {
+  const { id, action } = req.params;
+  const { token } = req.query;
+  if (!['approve', 'reject'].includes(action)) return res.status(400).send('Invalid action');
+  if (!process.env.OWNER_APPROVAL_SECRET || token !== ownerToken(id, action)) return res.status(403).send('ลิงก์ไม่ถูกต้องหรือหมดอายุ');
+
+  try {
+    const r = await fetch(`https://api.notion.com/v1/pages/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${process.env.NOTION_TOKEN}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ properties: { 'สถานะเจ้าของห้อง': { select: { name: action === 'approve' ? 'ยืนยันแล้ว' : 'ปฏิเสธ' } } } }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || 'update failed');
+    res.send(ownerResultPage(action === 'approve'));
+  } catch (err) {
+    res.status(500).send('เกิดข้อผิดพลาด: ' + err.message);
+  }
+});
+
 async function syncBookings(queryOverride) {
   const notionToken = process.env.NOTION_TOKEN;
   const bookingDb    = process.env.NOTION_BOOKING_DB_ID;
@@ -315,6 +415,7 @@ async function syncBookings(queryOverride) {
         'สถานะการจอง':        { select: { name: booking.status === 'ยกเลิก' ? 'ยกเลิก' : 'ยืนยันแล้ว' } },
         'Gmail Message ID':  { rich_text: [{ text: { content: m.id } }] },
         'อ่านแล้ว':           { checkbox: false },
+        'สถานะเจ้าของห้อง':    { select: { name: 'รอตอบรับ' } },
       };
       if (booking.phone)                   props['เบอร์โทร']         = { phone_number: booking.phone };
       if (booking.room)                    props['ห้อง/ทรัพย์สิน']    = { rich_text: [{ text: { content: booking.room } }] };
@@ -336,6 +437,13 @@ async function syncBookings(queryOverride) {
       const createData = await createRes.json();
       if (!createRes.ok) throw new Error(createData.message || JSON.stringify(createData));
       summary.created++;
+
+      try {
+        await sendOwnerApprovalEmail(createData.id, booking);
+      } catch (mailErr) {
+        summary.mailFailed = summary.mailFailed || [];
+        summary.mailFailed.push({ id: m.id, error: mailErr.message });
+      }
     } catch (err) {
       summary.failed.push({ id: m.id, error: err.message });
     }
@@ -381,6 +489,7 @@ app.get('/api/bookings', async (req, res) => {
         status: props['สถานะการจอง']?.select?.name || '',
         booking_id: props['หมายเลขการจอง']?.rich_text?.[0]?.plain_text || '',
         base_rate: props['ราคา Base Rate (บาท)']?.number ?? null,
+        owner_status: props['สถานะเจ้าของห้อง']?.select?.name || '',
         notes: props['หมายเหตุ']?.rich_text?.[0]?.plain_text || '',
         read: !!props['อ่านแล้ว']?.checkbox,
         created_time: p.created_time,
