@@ -444,6 +444,7 @@ async function syncBookings(queryOverride) {
       try {
         await sendOwnerApprovalEmail(createData.id, booking);
       } catch (mailErr) {
+        console.error('sendOwnerApprovalEmail failed for', m.id, mailErr);
         summary.mailFailed = summary.mailFailed || [];
         summary.mailFailed.push({ id: m.id, error: mailErr.message });
       }
