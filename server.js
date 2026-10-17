@@ -388,7 +388,7 @@ async function syncBookings(queryOverride) {
   const accessToken = await getGmailAccessToken();
   const listRes = await fetch(
     'https://gmail.googleapis.com/gmail/v1/users/me/messages?' +
-      new URLSearchParams({ q: queryOverride || 'from:(agoda.com OR airbnb.com) newer_than:14d', maxResults: '20' }),
+      new URLSearchParams({ q: queryOverride || 'from:(agoda.com OR airbnb.com OR imnoonan2@gmail.com) newer_than:14d', maxResults: '20' }),
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const listData = await listRes.json();
