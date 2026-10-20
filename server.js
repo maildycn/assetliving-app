@@ -196,10 +196,23 @@ async function notionBookingExists(dbId, notionToken, messageId) {
   const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${notionToken}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filter: { property: 'Gmail Message ID', rich_text: { equals: messageId } } }),
+    body: JSON.stringify({ filter: { property: 'Gmail Message ID', rich_text: { contains: messageId } } }),
   });
   const data = await r.json();
   return (data.results || []).length > 0;
+}
+
+// Agoda/Airbnb มักส่งหลายอีเมล (ยืนยัน/แก้ไข/อัปเดตผู้เข้าพัก) สำหรับการจองเดียวกัน — แต่ละฉบับมี Gmail Message ID
+// ต่างกัน จึงต้องเช็คซ้ำด้วยหมายเลขการจองด้วย ไม่งั้นจะได้การ์ดซ้ำในเว็บ (พบจริง: booking #2059712417 ซ้ำ 3 ใบ)
+async function notionBookingIdExists(dbId, notionToken, bookingId) {
+  const r = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${notionToken}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filter: { property: 'หมายเลขการจอง', rich_text: { equals: bookingId } } }),
+  });
+  const data = await r.json();
+  const results = data.results || [];
+  return results[0]?.id || null;
 }
 
 async function extractBookingWithClaude(emailText, fromAddr, subject) {
@@ -410,6 +423,28 @@ async function syncBookings(queryOverride) {
 
       const booking = await extractBookingWithClaude(bodyText, fromAddr, subject);
       const dateWarnings = sanityCheckDates(booking);
+
+      if (booking.booking_id) {
+        const existingId = await notionBookingIdExists(bookingDb, notionToken, booking.booking_id);
+        if (existingId) {
+          // อีเมลฉบับใหม่แต่หมายเลขการจองซ้ำกับที่มีอยู่แล้ว — ไม่สร้างการ์ดใหม่ แค่ผูก Gmail Message ID นี้ไว้กับใบเดิม
+          // กัน sync รอบถัดไปมาประมวลผลอีเมลฉบับนี้ซ้ำอีก
+          const pageRes = await fetch(`https://api.notion.com/v1/pages/${existingId}`, {
+            headers: { Authorization: `Bearer ${notionToken}`, 'Notion-Version': '2022-06-28' },
+          });
+          const pageData = await pageRes.json();
+          const existingMsgIds = pageData.properties?.['Gmail Message ID']?.rich_text?.[0]?.plain_text || '';
+          await fetch(`https://api.notion.com/v1/pages/${existingId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${notionToken}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ properties: { 'Gmail Message ID': { rich_text: [{ text: { content: `${existingMsgIds},${m.id}` } }] } } }),
+          });
+          summary.duplicateBookingId = summary.duplicateBookingId || [];
+          summary.duplicateBookingId.push({ id: m.id, booking_id: booking.booking_id, existingPage: existingId });
+          summary.skipped++;
+          continue;
+        }
+      }
 
       const props = {
         'ชื่อผู้เข้าพัก':      { title: [{ text: { content: booking.guest_name || '(ไม่ทราบชื่อ)' } }] },
