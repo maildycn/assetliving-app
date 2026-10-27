@@ -158,38 +158,54 @@ app.post('/api/gcal', async (req, res) => {
   }
 });
 
-// ── Gmail OAuth (user refresh token, read-only) ───────────────────────────────
-async function getGmailAccessToken() {
-  const clientId     = process.env.GOOGLE_GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_GMAIL_REFRESH_TOKEN;
-  if (!clientId || !clientSecret || !refreshToken) throw new Error('GOOGLE_GMAIL_CLIENT_ID / GOOGLE_GMAIL_CLIENT_SECRET / GOOGLE_GMAIL_REFRESH_TOKEN not configured');
+// ── Gmail IMAP (app password, read-only) ───────────────────────────────────────
+// แทนที่ Gmail REST API + OAuth เดิม (refresh token เป็น "restricted scope" ตาม
+// Google — publish ไป production ไม่ได้ถ้าไม่ผ่าน security assessment ทำให้ token
+// หมดอายุทุก 7 วันตลอดไปถ้ายังอยู่ใน Testing) ใช้ app password เดียวกับที่ใช้ส่ง
+// อีเมลแจ้งเจ้าของอยู่แล้ว (OWNER_NOTIFY_EMAIL_USER/PASSWORD) — app password ไม่หมดอายุ
+// ตามรอบแบบนี้ และใช้ได้ทั้ง IMAP/SMTP เพราะผูกกับทั้งบัญชี ไม่ใช่ผูกกับ scope
+const { ImapFlow }    = require('imapflow');
+const { simpleParser } = require('mailparser');
 
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error_description || data.error || 'Gmail token error');
-  return data.access_token;
-}
+async function fetchBookingEmails(queryOverride) {
+  const user = process.env.OWNER_NOTIFY_EMAIL_USER;
+  const pass = process.env.OWNER_NOTIFY_EMAIL_APP_PASSWORD;
+  if (!user || !pass) throw new Error('OWNER_NOTIFY_EMAIL_USER / OWNER_NOTIFY_EMAIL_APP_PASSWORD not configured');
 
-function decodeBase64Url(str) {
-  return Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-}
+  const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user, pass }, logger: false });
+  await client.connect();
+  const emails = [];
+  try {
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const uids = new Set();
+      if (queryOverride) {
+        (await client.search({ or: [{ subject: queryOverride }, { body: queryOverride }], since }, { uid: true })).forEach((u) => uids.add(u));
+      } else {
+        for (const from of ['agoda.com', 'airbnb.com', 'imnoonan2@gmail.com']) {
+          (await client.search({ from, since }, { uid: true })).forEach((u) => uids.add(u));
+        }
+      }
 
-// อีเมลจอง Agoda/Airbnb มักเป็น HTML ล้วน ไม่มี text/plain part — ต้อง walk หา part ที่ใช้ได้
-function extractEmailBody(payload) {
-  let plainBody = '';
-  let htmlBody  = '';
-  (function walk(part) {
-    if (!part) return;
-    if (part.mimeType === 'text/plain' && part.body?.data) plainBody += decodeBase64Url(part.body.data);
-    if (part.mimeType === 'text/html' && part.body?.data) htmlBody += decodeBase64Url(part.body.data);
-    (part.parts || []).forEach(walk);
-  })(payload);
-  return plainBody || htmlBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      for (const uid of uids) {
+        const msg = await client.fetchOne(uid, { source: true }, { uid: true });
+        if (!msg?.source) continue;
+        const parsed = await simpleParser(msg.source);
+        emails.push({
+          id:      parsed.messageId || `imap-uid-${uid}`,
+          from:    parsed.from?.text || '',
+          subject: parsed.subject || '',
+          body:    parsed.text || (parsed.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '),
+        });
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+  return emails;
 }
 
 async function notionBookingExists(dbId, notionToken, messageId) {
@@ -398,30 +414,14 @@ async function syncBookings(queryOverride) {
 
   const summary = { checked: 0, created: 0, skipped: 0, failed: [] };
 
-  const accessToken = await getGmailAccessToken();
-  const listRes = await fetch(
-    'https://gmail.googleapis.com/gmail/v1/users/me/messages?' +
-      new URLSearchParams({ q: queryOverride || 'from:(agoda.com OR airbnb.com OR imnoonan2@gmail.com) newer_than:14d', maxResults: '20' }),
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-  const listData = await listRes.json();
-  const messages = listData.messages || [];
+  const messages = await fetchBookingEmails(queryOverride);
   summary.checked = messages.length;
 
   for (const m of messages) {
     try {
       if (await notionBookingExists(bookingDb, notionToken, m.id)) { summary.skipped++; continue; }
 
-      const msgRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const msg = await msgRes.json();
-      const headers  = msg.payload?.headers || [];
-      const fromAddr = headers.find((h) => h.name === 'From')?.value || '';
-      const subject  = headers.find((h) => h.name === 'Subject')?.value || '';
-      const bodyText = extractEmailBody(msg.payload);
-
-      const booking = await extractBookingWithClaude(bodyText, fromAddr, subject);
+      const booking = await extractBookingWithClaude(m.body, m.from, m.subject);
       const dateWarnings = sanityCheckDates(booking);
 
       if (booking.booking_id) {

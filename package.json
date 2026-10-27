@@ -4,13 +4,15 @@
   "description": "AssetLiving — ระบบจัดการสัญญาเช่าด้วย AI",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node --env-file=.env server.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
+    "imapflow": "^1.0.167",
+    "mailparser": "^3.7.1",
     "nodemailer": "^6.9.14"
   }
 }
