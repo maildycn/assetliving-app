@@ -161,16 +161,16 @@ app.post('/api/gcal', async (req, res) => {
 // ── Gmail IMAP (app password, read-only) ───────────────────────────────────────
 // แทนที่ Gmail REST API + OAuth เดิม (refresh token เป็น "restricted scope" ตาม
 // Google — publish ไป production ไม่ได้ถ้าไม่ผ่าน security assessment ทำให้ token
-// หมดอายุทุก 7 วันตลอดไปถ้ายังอยู่ใน Testing) ใช้ app password เดียวกับที่ใช้ส่ง
-// อีเมลแจ้งเจ้าของอยู่แล้ว (OWNER_NOTIFY_EMAIL_USER/PASSWORD) — app password ไม่หมดอายุ
-// ตามรอบแบบนี้ และใช้ได้ทั้ง IMAP/SMTP เพราะผูกกับทั้งบัญชี ไม่ใช่ผูกกับ scope
+// หมดอายุทุก 7 วันตลอดไปถ้ายังอยู่ใน Testing) ใช้ app password ของ GMAIL_BOOKING_USER
+// (กล่องอีเมลที่รับการจองจาก Agoda/Airbnb จริง — คนละบัญชีกับ OWNER_NOTIFY_EMAIL_USER
+// ที่ใช้แค่ส่งอีเมลแจ้งเจ้าของ) แทน — app password ไม่หมดอายุตามรอบแบบ OAuth testing
 const { ImapFlow }    = require('imapflow');
 const { simpleParser } = require('mailparser');
 
 async function fetchBookingEmails(queryOverride) {
-  const user = process.env.OWNER_NOTIFY_EMAIL_USER;
-  const pass = process.env.OWNER_NOTIFY_EMAIL_APP_PASSWORD;
-  if (!user || !pass) throw new Error('OWNER_NOTIFY_EMAIL_USER / OWNER_NOTIFY_EMAIL_APP_PASSWORD not configured');
+  const user = process.env.GMAIL_BOOKING_USER;
+  const pass = process.env.GMAIL_BOOKING_APP_PASSWORD;
+  if (!user || !pass) throw new Error('GMAIL_BOOKING_USER / GMAIL_BOOKING_APP_PASSWORD not configured');
 
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user, pass }, logger: false });
   await client.connect();
